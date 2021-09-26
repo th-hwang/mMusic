@@ -130,4 +130,5 @@ dmypy.json
 
 # Mac
 .DS_Store
-
+.gitignore
+test.py
