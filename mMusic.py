@@ -1,633 +1,86 @@
-#!/usr/bin/python
+#!/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/python
 # -*- coding: utf-8 -*-
 # ver 0.1 : release 19.08.07
 # ver 0.2 : support ranking  based on melon top 100 chart
 # ver 0.3 : support updating database based on music in the directory
 # ver 0.4 : [bug fix] change handling escape characters
-# ver 0.5 : change python version to 3.9 
+# ver 0.5 : change to python3 and make class
 
-import getpass
+import MySQLdb
 import logging
 import logging.handlers
-import argparse
-import MySQLdb
-import re
-import os
-import shutil
-import subprocess
-import mutagen
-import datetime
-import sys
-
-from selenium import webdriver
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from bs4 import BeautifulSoup
 
 
-def connectDB():
-    	
-    logger.debug("Connecting to the database sever")
-    
-    try:
-        dbCon = MySQLdb.connect( host = 'localhost', user = '*', passwd = '*', charset = 'utf8')
+class HandleDB:
 
-        dbCon.query("set character_set_connection=utf8;")
-        dbCon.query("set character_set_server=utf8;")
-        dbCon.query("set character_set_client=utf8;")
-        dbCon.query("set character_set_results=utf8;")
-        dbCon.query("set character_set_database=utf8;")
-        
-        logger.debug("Success to connect to the database sever")
-        return dbCon
-        
-    except : 
-        logger.error("Fail to connect to the database sever")
-        raise 
+    def __init__(self, dbHost, dbUser, dbPasswd):
+        logger.debug("Initialize handleDB Class")
 
-def sendQuery(dbCon, SQL, data=(),mode="") :
-    
-    try:
-        cursor = dbCon.cursor()
-        cursor.execute(SQL,data)
-        if (mode == "DML") : return dbCon.commit() # dml = data manupulation language, should be commited to change data
-        else : return cursor.fetchall()
-        
-    except MySQLdb.Error, e:
-        logger.error("Error in SendQuery() with SQL = [%s] and data = [%s]", SQL, data)
-        logger.error("Error in SendQuery() with error messsage %s", e)
-        if (mode == "DML") :  
-            dbCon.rollback()
-            return False
-        
-    finally:
-        cursor.close()
-
-def existDB(dbCon, dbName):
-    
-    logger.debug("Checking the existence of the database [%s]",dbName) 
-    
-    sql = """Show databases like '{db}';""".format(db=dbName)
-    
-    return len(sendQuery(dbCon,sql))>0
-
-def existTB(dbCon,dbName, tbName):
-    
-    logger.debug("Checking the existence of the user table [%s] in the database [%s]",tbName, dbName)
-
-    sql = """Show tables in {db} like '{tb}';""".format(db=dbName, tb=tbName)
-    
-    return len(sendQuery(dbCon,sql))>0
-
-def makeDB(dbCon,dbName):
-    logger.debug("Cannot find the database [%s]", dbName)
-    logger.debug("Creating the database [%s]", dbName)
-    
-    sql = """CREATE DATABASE IF NOT EXISTS {db};""".format(db=dbName)
-   
-    return sendQuery(dbCon, sql) 
-
-def makeUserTB(dbCon,dbName, userTB):
-    logger.debug("Cannot find the user table [%s] in the database [%s]", userTB, dbName)
-    logger.debug("Creating the user table [%s] in the database [%s]", userTB, dbName)
-    
-    sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
-			idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
-			loginID  	varchar(32) NOT NULL,
-			passwd 	    varchar(32) NOT NULL,
-			privilege	boolean     DEFAULT false,
-			deleteflag	boolean     DEFAULT false,
-			PRIMARY KEY (idUser)
-			) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=userTB)
-    
-    return sendQuery(dbCon,sql)
-
-def validStr(string):
-    logger.debug("Checking the validation of string. Meta character is not allowed")
-    
-    if (len(re.findall(r"[-=#/?:;$()^%&']", string)) != 0) :
-        print "Meta Character is not allowed in your string" 
-        return False
-    elif (len(string)<5):
-        print "Your string is too short. It should be >5"
-        return False
-    else : return True
-    
-def getUserAccount(msg="", userID=""):
-        
-    if (msg != "") : print(msg) 
-    
-    while True:
-        if (userID == ""): userID=raw_input("login ID: ") 
-        if not (validStr(userID)): 
-            userID=""
-            continue
-            
-        pwd1 = getpass.getpass(userID + "'s password: ")
-        if not (validStr(pwd1)): continue
-        
-        pwd2 = getpass.getpass("retype your password: ")
-        if not (validStr(pwd2)): continue
-        
-        if (pwd1 == pwd2): break
-        print ("The current password don't match with the previous password")
-        
-    return {'uid':userID, 'passwd':pwd1, 'privilege':False}
-
-def checkUser(dbCon,dbName, userTB, userInfo, wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
-    logger.debug("Checking validation of userInfo with matching it to that in User_Table")
-    
-    sql = """select * from {db}.{tb}""" + " " + wh # need space between table name and where 
-    sql = sql.format(db=dbName, tb=userTB, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
-
-    return len(sendQuery(dbCon,sql))>0
-
-def isFirstUser(dbCon, dbName, userTB):
-    logger.debug("Checking if you are the first user. The first user can have all privilege")
-    dummyUser = {'uid':"", 'passwd':"", 'privilege':False}
-    
-    return not checkUser(dbCon, dbName, userTB, dummyUser, wh="")
-    
-def existUser(dbCon, dbName, userTB, userInfo):
-    logger.debug("Checking if %s exists in User_Table.",userInfo['uid'])
-
-    return checkUser(dbCon, dbName, userTB, userInfo, wh="""where loginID='{uid}'""")
-
-def isAdmin(dbCon, dbName, userTB):
-    logger.debug("Checking if you are the admin. The admin who has privilege can add or delete account ")
-    trial = 1  # trial should be < maxtrial
-    maxtrial = 2 
-    
-    while True:
-        adminInfo = getUserAccount("To do your request we need to know admin\'s login id and password")
-        adminInfo['privilege']=True
-
-        if (checkUser(dbCon, dbName, userTB, adminInfo)) : return True
-        else: 
-            if (trial > maxtrial) : return False
-            print "Wrong admin login id or password. Try it again. {tr} more trial left".format(tr=maxtrial - trial)
-            trial += 1
-
-def addUser(dbCon, dbName, userTB, homeDir, userInfo):
-    logger.debug("Adding user account [%s] into the user table [%s] in the database [%s]",userInfo['uid'], userTB, dbName)
-    
-    if (existUser(dbCon,dbName, userTB, userInfo)):
-        logger.error("%s cannot be available because it already exists", userInfo['uid'])
-        return False
-    elif (isFirstUser(dbCon, dbName, userTB)): 
-        print ("{uid} is the first one. All privilege is allowed.".format(uid=userInfo['uid']))    
-        userInfo['privilege'] = True
-        executeFlag = True
-    else :
-        userInfo['privilege'] = False
-        executeFlag = isAdmin(dbCon,dbName, userTB)
-        if not executeFlag : logger.error("Admin's login ID or password is incorrect")
-    
-    if (executeFlag):
-        makeUserAccount(dbCon, dbName, userTB, userInfo)
-        makeMusicTB(dbCon, dbName, userInfo['uid'])
-        makeUserDir(homeDir+userInfo['uid'])
-        return True
-    else : return False
-    
-def makeUserAccount(dbCon, dbName, userTB, userInfo):
-    sql = """insert into {db}.{tb} (loginID, passwd, privilege) values ('{uid}','{pwd}',{pr})"""
-    sql = sql.format(db=dbName, tb=userTB, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'] )
-    
-    return sendQuery(dbCon,sql,mode="DML")
-
-def makeMusicTB(dbCon,dbName, musicTB):
-    logger.debug("Cannot find the music table [%s] in the database [%s]", musicTB, dbName)
-    logger.debug("Creating the music table [%s] in the database [%s]", musicTB, dbName)
-    
-    sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
-			idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
-			title		varchar(256),
-			artist 		varchar(256),
-			album 		varchar(256), 
-			sdate 		date,
-			genre 		varchar(32),
-			filename 	varchar(256),
-			currentrank	int		unsigned,
-			favor		int		unsigned,
-			deleteflag	int		unsigned,
-			PRIMARY KEY (idmusic)
-			) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=musicTB)
-    
-    return sendQuery(dbCon,sql)
-    
-def makeUserDir(strDir):
-    if not os.access(strDir,os.F_OK) : 
-        try: 
-            return os.makedirs(strDir,0o775)
+        logger.debug("Connecting to the database sever")
+        try:
+            self.dbCon = MySQLdb.connect(
+                host=dbHost, user=dbUser, passwd=dbPasswd, charset='utf8')
+            logger.debug("Success to connect to the database sever")
         except:
-            logger.error("Error in makeUserDir().")
-            return fal
-    
-def removeUser(dbCon, dbName, userTB, homeDir, userInfo):
-    logger.debug("Deleting user account [%s] from the user table [%s] in the database [%s]",userInfo['uid'], userTB, dbName)
-
-    if (existUser(dbCon,dbName, userTB, userInfo)):
-        if (isAdmin(dbCon,dbName, userTB)):
-            deleteUserAccount(dbCon, dbName, userTB, userInfo)
-            deleteMusicTable(dbCon, dbName, userInfo['uid'])
-            deleteUserDir(homeDir+userInfo['uid'])
-            return True
-        else: 
-            logger.error("Admin's login ID or password is incorrect")
-            return False
-            
-    else:
-        logger.error("%s cannot be deleted because it doesnot exists in the user table [%s] in the database [%s] ",userInfo['uid'], userTB, dbName)
-        return False
-
-def deleteUserAccount(dbCon, dbName, userTB, userInfo):
-    sql = """delete from {db}.{tb} where loginID= '{uid}'"""
-    sql = sql.format(db=dbName, tb=userTB, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'] )
-    
-    return sendQuery(dbCon,sql,mode="DML")
-
-def deleteMusicTable(dbCon, dbName, musicTB):
-    sql = """drop table {db}.{tb}"""
-    sql = sql.format(db=dbName, tb=musicTB, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'] )
-    
-    return sendQuery(dbCon,sql,mode="DML")
-
-def deleteUserDir(strDir):
-    if os.access(strDir,os.F_OK) : 
-        try :
-            return shutil.rmtree(strDir)
-        except :
-            logger.error("Error in deleteUserDir().")
+            logger.error("Fail to connect to the database sever")
             raise
-# Handling Music Files
-            
-def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
-    logger.debug("Adding musics list ---")
 
-    updateMusicDB(dbCon,dbName, userInfo['uid'], [os.path.join(homeDir,userInfo['uid']),])
-    insertMusicDB(dbCon,dbName, userInfo['uid'], os.path.join(homeDir, userInfo['uid']), musicList)
-    
-    return True
-
-def insertMusicDB(dbCon,dbName, musicTB, dstDir, musicList):
-    logger.info("inserting music information into database .....")
-    
-    for ff in makeMusicList(musicList):
-        tagToUTF8(ff)	
-        tag = getTag(ff)
-        
-        if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
-            #----
-            logger.info ("[Skip] {fn} already exists ................. [Skip]".format(fn=ff))
-        else:
-            logger.info("[Move] {fn} is moving to {dr} ............... [Ok]".format(fn=ff, dr=dstDir))
-
-            insertMusicRecord(dbCon, dbName, musicTB, tag)
-            shutil.move(ff,dstDir) 
-
-def makeMusicList(musicList):
-    result = []
-    
-    for ff in musicList : 
-        if(os.path.isdir(ff)):
-            logger.info("%s is directory. Walk into the directory "%ff)
-            if os.listdir(ff):
-                for (path, dirs, files) in os.walk(ff):
-                    for ff2 in files: 
-                        fName = os.path.abspath(os.path.join(path,ff2))
-                        if (isMusic(fName)): result.append(fName)
-                        else : logger.info("[Skip] "+ fName + " is not music file. ..... [Skip]")
-            else: logger.info("[Skip] "+ff + " is empty .......... [Skip]")
-                        
-        else:
-            if (isMusic(ff)) : result.append(os.path.abspath(ff))
-            else: logger.info("[Skip] "+ff + " is not music file. ..... [Skip]")
-
-    return result        
-
-def isMusic(fName):
-    slist = ['id3','oggs','flac']
-    isMusicFlag = False
-    with open(fName,'rb') as ff:
-        fhead = ff.read(4)
-        isMusicFlag=(fhead[0:3].lower() in slist) or (fhead.lower() in slist)
-    return isMusicFlag
-
-def tagToUTF8(src):
-    p=subprocess.Popen(["/usr/local/bin/mid3iconv","-e","cp949", src],stdout=subprocess.PIPE).stdout
-    result = p.read().strip()
-    p.close()
-    return result
-
-def getTag(fName):
-    logger.debug("Parcing Tag")
-    
-    tag = mutagen.File(fName)
-    
-    result={}
-    result['title'] 	= parsingSong(tag,'TIT2')
-    result['artist'] 	= parsingSong(tag,'TPE1')
-    result['album'] 	= parsingSong(tag,'TALB')
-    result['sdate'] 	= parsingSong(tag,'TDRC')
-    result['genre'] 	= parsingSong(tag,'TCON')
-    # result['lyric'] 	= parsingSong(tag,'USLT::kor')
-    # result['coverimg'] 	= parsingSong(tag,'APIC:')
-    result['filename']	= os.path.basename(fName).decode(sys.stdin.encoding).encode('utf8')
-    result['currentrank']	= 9999
-    result['favor']		= 0
-    result['deleteflag']	= False
-
-    return result
-
-def parsingSong(mutagenObj,frameID):
-    # the TAG of cover_image sometimes chages "APIC:" to the other, such as "APIC:SYK"
-    # to indicate tag of cover image, compare frameID with each mutagenObj.keys()
-    for mtg in mutagenObj.keys():
-        if 'APIC:' in frameID and frameID in mtg: # processing cover image
-            return mutagenObj[mtg].data  
-        elif 'USLT' in frameID and frameID in mtg: #process lyric
-            return unicode(mutagenObj[mtg].text).encode('utf8')  
-        elif 'TDRC' in frameID and frameID in mtg:
-            strtmp =mutagenObj[mtg].text[0].encode('iso-8859-1')
-            if len(strtmp) <= 4 : strtmp = datetime.datetime.now().strftime("%y%m%d")
-            return unicode(strtmp.replace("-","")).encode('utf8')  
-        elif frameID in mtg:
-            return unicode(mutagenObj[frameID].text[0]).encode('utf8')
-
-def isInMusicDB_ArtistTitle(dbCon,dbName, musicTB, tag):
-    return isInMusicDB(dbCon, dbName, musicTB, tag, mode="artist") and isInMusicDB(dbCon, dbName, musicTB, tag, mode="title")
-
-def isInMusicDB(dbCon, dbName, musicTB, tag, mode='title'):
-    logger.debug("checking if {fn} exsists in music DB".format(fn=tag[mode]))
-
-    sql = """select * from {db}.{tb} where {md} like '%%{da}%%'"""
-    sql = sql.format(db=dbName, tb=musicTB, md=mode, da=simplify(tag[mode]))
-    
-    return sendQuery(dbCon, sql)
-
-def insertMusicRecord(dbCon, dbName, musicTB, tag):
-    logger.debug("inserting tag data into music TB {mtb}".format(mtb=musicTB))
-    
-    sql = """insert into {db}.{tb} (title, artist, album, sdate, genre, filename, currentrank, favor, deleteflag) 
-                            values ("{ti}", "{ar}", "{al}", {sd}, "{ge}", "{fi}", {cu}, {fa}, {de})"""
-    sql = sql.format(db=dbName, tb=musicTB, ti=simplify(tag['title']), ar=simplify(tag['artist']), al=simplify(tag['album']),
-                     sd=tag['sdate'], ge=simplify(tag['genre']), cu=tag['currentrank'], fa=tag['favor'],
-                     de=tag['deleteflag'], fi=simplify(tag['filename']))
-    
-    return sendQuery(dbCon, sql, mode="DML")
-
-def updateMusicDB(dbCon,dbName, musicTB, musicDir): # musicDir should be list
-    logger.info("Updating Database .....")
-    
-    setDeleteFlag(dbCon, dbName, musicTB)
-    
-    for ff in makeMusicList(musicDir):
-        tag = getTag(ff)
-        if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)) : 
-            unsetDeleteFlag(dbCon, dbName, musicTB, tag)
-            increaseFavor(dbCon, dbName, musicTB, tag)
-        else: 
-            continue
-        
-    return deleteMusicRecord(dbCon, dbName, musicTB)
-        
-def setDeleteFlag(dbCon, dbName, musicTB):
-    logger.debug ("Setting delete-flag of all music to on")
-    sql = """update {db}.{tb} set deleteflag=True"""    
-    sql = sql.format(db=dbName, tb=musicTB)
-    
-    return sendQuery(dbCon, sql,mode="DML")
-
-def unsetDeleteFlag(dbCon, dbName, musicTB, tag):
-    logger.debug ("Setting delete-flag of all music to off")
-    sql = """update {db}.{tb} set deleteflag=False where title = "{ti}" and artist="{ar}" """    
-    sql = sql.format(db=dbName, tb=musicTB, ti=simplify(tag['title']), ar=simplify(tag['artist']))
-    
-    return sendQuery(dbCon, sql,mode="DML")
-
-def increaseFavor(dbCon, dbName, musicTB, tag):
-    logger.debug ("Increasing favorite number of music")
-    sql = """update {db}.{tb} set favor=favor+1 where title = "{ti}" and artist="{ar}" """
-    sql = sql.format(db=dbName, tb=musicTB, ti=simplify(tag['title']), ar=simplify(tag['artist']))
-    
-    return sendQuery(dbCon, sql,mode="DML")
-
-def deleteMusicRecord(dbCon, dbName, musicTB):
-    logger.debug ("Deleting music records having on delete-flag ")
-    sql = """delete from {db}.{tb} where deleteflag=True"""
-    sql = sql.format(db=dbName, tb=musicTB)
-    
-    return sendQuery(dbCon, sql,mode="DML")
-
-def updateRank(dbCon, dbName, musicTB, th=0.5): # if matchingRate >50% 
-    logger.debug("Crawling from Melon top 100 chart. And then update current rank")
-
-    sql = """select idmusic, title, artist, album from {db}.{tb}"""
-    sql = sql.format(db=dbName, tb=musicTB)
-    sList = list(sendQuery(dbCon, sql))
-    
-    setCurrentRank(dbCon, dbName, musicTB, 101) # default rank 101
-    musicRank = getRank()
-
-    for (idMusic, title, artist, album) in sList:
-        maxMR = 0.0
-        for idx, ff in enumerate(musicRank):
-            # data from database is unicode, crawling data is utf8
-            logger.debug("src: {id}/{ln} || {ti} || {ar} || {al}".format(id=idMusic, ln=len(sList), ti=title.encode('utf8'), ar=artist.encode('utf8'), al=album.encode('utf8')))
-            logger.debug("tgt: {id}/{ln} || {ti} || {ar} || {al}".format(id=idx+1, ln=len(musicRank), ti=ff['title'], ar=ff['artist'], al=ff['album']))
-            
-            # the best case is with only title and artist , without 
-            curMR = matchingRate(title+artist, unicode(ff['title']+ff['artist'],'utf8')) # current matching rate
-            # curMR = matchingRate(title+artist+album,unicode(ff['title']+ff['artist']+ff['album'],'utf8')) # current matching rate
-            # curMR = matchingRate(title, unicode(ff['title'],'utf8')) +  matchingRate(artist, unicode(ff['artist'],'utf8')) + matchingRate(album, unicode(ff['album'],'utf8'))
-            
-            logger.debug("thMr : " + str(th)+" curMR : " + str(curMR)+" sList : "+ str(len(musicRank)))
-            
-            if curMR >= maxMR :
-                maxMR       = curMR
-                maxIdMusic  = idMusic
-                maxRank     = ff['rank']
-                maxTitle    = ff['title']
-                maxArtist   = ff['artist']
-                maxAlbum    = ff['album']
+    def sendQuery(self, SQL, data=(), mode=""):
+        try:
+            cursor = self.dbCon.cursor()
+            cursor.execute(SQL, data)
+            if (mode == "DML"):
+                # dml = data manupulation language, should be commited to change data
+                return self.dbCon.commit()
             else:
-                continue
-            
-        if (maxMR>=th):    
-            
-            logger.info("[DB]: title = '{ti}' || artist = '{ar}' || album = '{al}' || num/total {id}/{ln} ||"
-                        .format(id=idMusic, ln=len(sList), ti=title.encode('utf8'), ar=artist.encode('utf8'), al=album.encode('utf8')))
-            logger.info("[CH]: title = '{ti}' || artist = '{ar}' || album = '{al}' || rank = {ra} || MR = {mr} || {ln} musicRanks are left ||"
-                        .format(mr=maxMR, ln=len(musicRank), ra=maxRank, ti= maxTitle, ar=maxArtist, al=maxAlbum))
+                return cursor.fetchall()
 
-            insertRank(dbCon, dbName, musicTB, maxIdMusic, maxRank)
-            musicRank.remove({'rank':maxRank, 'title':maxTitle, 'artist':maxArtist, 'album':maxAlbum})    
-    # remained musicRank            
-    # print "--------------------------------------"
-    # for idx, ff in enumerate(musicRank):
-    #     logger.info(" [{nu}] title = '{ti}' || artist = '{ar}' || album = '{al}' || rank = {ra}"
-    #             .format(nu=idx, ra=ff['rank'], ti= ff['title'], ar=ff['artist'], al=ff['album']))
-    
-def setCurrentRank(dbCon, dbName, musicTB, defaultRank) :
-    logger.debug("Set current rank to default rank {dr}".format(dr=defaultRank))
-   
-    sql = """update {db}.{tb} set currentrank = {ra}"""
-    sql = sql.format(db=dbName, tb=musicTB, ra=defaultRank)
-    
-    return sendQuery(dbCon, sql, mode="DML")
+        except MySQLdb.Error as e:
+            logger.error(
+                "Error in SendQuery() with SQL = [%s] and data = [%s]", SQL, data)
+            logger.error("Error in SendQuery() with error messsage %s", e)
 
-def getRank():
-    logger.info("Connecting Melon Top 100 chart ..... ")
-    
-    phantomjs_path = r'/usr/bin/phantomjs'
-    dcap = dict(DesiredCapabilities.PHANTOMJS)
-    dcap["phantomjs.page.settings.userAgent"] = \
-        ("Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; SLCC2; .NET CLR 2.0.50727; .NET CLR 3.5.30729; "+
-        ".NET CLR 3.0.30729; Media Center PC 6.0; MAAU; .NET4.0C; .NET4.0E; InfoPath.2; rv:11.0) like Gecko")
+            if (mode == "DML"):
+                self.dbCon.rollback()
+                return False
 
-    driver = webdriver.PhantomJS(executable_path='/usr/bin/phantomjs',desired_capabilities=dcap, service_log_path='/tmp/ghostdriver.log')
-    driver.get("http://www.melon.com/chart/index.htm")
+        finally:
+            cursor.close()
 
-    #driver.save_screenshot("/Users/taehyunghwang/Works/test.png")
-    #print driver.page_source
+    def isExistDB(self, dbName):
 
-    soup = BeautifulSoup(driver.page_source, "html.parser")
-    driver.quit()
-    
-    logger.info("Parsing Melon Top 100 chart ..... ")
+        logger.debug("Checking the existence of the database [%s]", dbName)
 
-    result=[]
+        sql = """Show databases like '{db}';""".format(db=dbName)
 
-    for tName in ('lst50', 'lst100'):
-        for row in soup.find_all("tr", {"class" : tName}):
-            tmp = { 'rank'  : row.find("span", {"class": "rank"}).get_text().encode('utf8'),
-                    'title' : row.find("div", {"class": "ellipsis rank01"}).find("a").get_text().encode('utf8'),
-                    'artist': row.find("div", {"class": "ellipsis rank02"}).find("a").get_text().encode('utf8'),
-                    'album' : row.find("div", {"class": "ellipsis rank03"}).find("a").get_text().encode('utf8')}
-            result.append(tmp)
-    
-    return result
+        return len(self.sendQuery(sql)) > 0
 
-def matchingRate(src,tgt):
-    logger.debug("Comparing simplified src {sc} and simplified tgt {tg}".format(sc=simplify(src).encode('utf8'), tg=simplify(tgt).encode('utf8')))
-    cnt = 0
-    step = 2
-    simpSrc = simplify(src)
-    simpTgt = simplify(tgt)
-    
-    logger.debug("[SRC] : title = {sc}".format(sc=simplify(src).encode('utf8')))
-    logger.debug("[TGT] : title = {tg}".format(tg=simplify(tgt).encode('utf8')))
-    
-    for i in range(0,len(simpTgt),step):
-        
-        if simpTgt[i:i+step] in simpSrc :
-            cnt +=1
-            logger.debug("simpTgt[i:i+step]  - " + simpTgt[i:i+step] + " : True, Count : "+str(cnt)+"/"+str(len(simpTgt)/step+ (0 if len(simpTgt)%2==0 else 1)))
+    def isExistTB(self, dbName, tbName):
+
+        if (self.isExistDB(dbName)):
+
+            logger.debug(
+                "Checking the existence of the user table [%s] in the database [%s]", tbName, dbName)
+
+            sql = """Show tables in {db} like '{tb}';""".format(
+                db=dbName, tb=tbName)
+            return len(self.sendQuery(sql)) > 0
         else:
-            logger.debug("simpTgt[i:i+step]  - " + simpTgt[i:i+step] + " : False")
-            continue
+            logger.debug(" There is no database [%s]", dbName)
+            return False
 
-    return float(cnt)/float(len(simpTgt)/step + (0 if len(simpTgt)%2==0 else 1))
 
-def simplify(sName):
-    dls = {'?','!',':',';', '\'','`','\"'}
-    if not sName is None :
-        for ff in dls:
-            sName = sName.replace(ff,"")
-        return sName.lower()
-    else:
-        return sName
-
-def insertRank(dbCon, dbName, musicTB, maxIdMusic, rank):
-    logger.debug("Inserting music rank into music Table {tb}".format(tb=musicTB))
-    
-    sql = """update {db}.{tb} set currentrank = {ra} where idMusic={idx}"""
-    sql = sql.format(db=dbName, tb=musicTB, ra=rank, idx=maxIdMusic)
-    
-    return sendQuery(dbCon, sql, mode="DML")
-        
 if __name__ == "__main__":
-    
-    # setting define directory 
-    DB_NAME="Home_Music" 
-    USER_TB="User_Table"
-    HOME_DIR="/common/Musics/"
 
-    # parsing argument
-    parser = argparse.ArgumentParser()
-    
-    parser.add_argument("-u", "--uID", required=True, metavar="userID", type=str, help="user id")
-    parser.add_argument("-s", "--musicsList", required=False, nargs="+",  help="music file or directory having them")
-    parser.add_argument("-op", "--operation", required=False, choices={'add','rm'}, help="add or remove user account")
-    parser.add_argument("-l", "--log", required=False, action="store_true", help="make log file in account directory")
-    parser.add_argument("-r", "--rank", required=False, action="store_true", help="update music rank based on melop top 100 chart")
-    parser.add_argument("-up", "--update", required=False, action="store_true", help="update database based on music in the directory")
-    args = parser.parse_args()
-    
-    # setup logging
-    logger = logging.getLogger(args.uID)
-    fomatter = logging.Formatter('[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
-    
-    if (args.log): 
-        fileHandler=logging.handlers.RotatingFileHandler(HOME_DIR+args.uID+".log",maxBytes=1024*1024*10,backupCount=5)
-        fileHandler.setFormatter(fomatter)
-        logger.addHandler(fileHandler)
-    
+    logger = logging.getLogger("kodi")
+    fomatter = logging.Formatter(
+        '[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
+
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    
-    logger.setLevel(logging.INFO)
-    #logger.setLevel(logging.DEBUG)
-    # setup database connection and make tables in database
-    dbCon = connectDB()
-    
-    logger.debug("Setting up the database and the table")
-    if not (existDB(dbCon,DB_NAME)): 
-        makeDB(dbCon, DB_NAME)
-        makeUserTB(dbCon, DB_NAME, USER_TB)
-    elif not (existTB(dbCon, DB_NAME, USER_TB)): makeUserTB(dbCon, DB_NAME, USER_TB)
-    logger.debug("Success to set up the database and the table")
-    
-    logger.debug("Handling argument")
-    
-    if(args.operation == "add"):
-        logger.debug("Add user ----")
-        try: userInfo
-        except NameError: userInfo = getUserAccount("Welcome Home_Music.\n{uid}\'s account will be created".format(uid=args.uID),args.uID)
-        addUser(dbCon, DB_NAME, USER_TB, HOME_DIR, userInfo)
-        
-    elif(args.operation == "rm"):
-        logger.debug("remove user ----")
-        
-        try: userInfo
-        except NameError: userInfo = {'uid':args.uID, 'passwd':"", 'privilege':False}
-        
-        removeUser(dbCon, DB_NAME, USER_TB,HOME_DIR, userInfo)
-    
-    if (args.rank):
-        logger.debug("update rank based on melon top 100 chart")
-        try: userInfo
-        except NameError: userInfo = getUserAccount("Welcome Home_Music.",args.uID)
-        
-        updateRank(dbCon, DB_NAME, userInfo['uid'])
-        
-    
-    if (args.update):
-        logger.debug("update database based on melop top 100 chart")
-        try: userInfo
-        except NameError : userInfo = getUserAccount("Welcom Home_Music.",args.uID)
-        updateMusicDB(dbCon,DB_NAME, userInfo['uid'], [os.path.join(HOME_DIR,userInfo['uid']),])
-    
-    if(args.musicsList):
-        try: userInfo       # check if userinfo is defined or not
-        except NameError: userInfo = getUserAccount("Welcome Home_Music.",args.uID)
-            
-        if (existUser(dbCon, DB_NAME, USER_TB, userInfo)) :
-            if (checkUser(dbCon,DB_NAME, USER_TB, userInfo, """where loginID='{uid}' and passwd='{pwd}'""")): 
-                addMusic(dbCon, DB_NAME, HOME_DIR, userInfo, args.musicsList)
-            else:
-                logger.error("{uid}\'s password is incorrect".format(uid=userInfo['uid']))
-        else : 
-            logger.error("{uid} is not a user. please add user accout first".format(uid=userInfo['uid']))
-            
+
+    logger.setLevel(logging.DEBUG)
+    hDB = HandleDB("192.168.35.215", "kodi", "kodi")
+    # print(hDB.isExistDB("Home_Music"))
+    print(hDB.isExistTB("Home_Music", "User_Table"))
