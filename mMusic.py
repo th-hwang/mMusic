@@ -89,28 +89,24 @@ class HandleDB:
 class HandleUserTB():
 
     def __init__(self, hDB, dbName):
-        logger.debug("Initializing HandleAccountDB Class")
-
-        if not type(hDB) == HandleDB:
-            raise ValueError('Parameter hDB must be of type HandleDB')
+        logger.debug("Initializing HandleUserDB Class")
 
         self.hDB = hDB
         self.dbName = dbName
 
     def __del__(self):
-        logger.debug("Deleting HandleAccountDB Class")
+        logger.debug("Deleting HandleUserDB Class")
 
     def isExistTB(self, tbName):
-        print(self.hDB.isExistDB(self.dbName))
 
-        if self.hDB.isExistDB(self.dbName):
+        if (self.hDB.isExistDB(self.dbName)):
             logger.debug(
                 "Checking the existence of the user table [%s] in the database [%s]", tbName, self.dbName)
 
             sql = """Show tables in {db} like '{tb}';""".format(
                 db=self.dbName, tb=tbName)
 
-            return len(self.hDB.__sendQuery(sql)) > 0
+            return len(self.__sendQuery(sql)) > 0
         else:
             logger.debug("There is no database [%s]", self.dbName)
             return False
@@ -233,8 +229,9 @@ if __name__ == "__main__":
     # hDB.deleteDB(DB_NAME)
 
     hUserTB = HandleUserTB(hDB, DB_NAME)
+
     hUserTB.makeTB(USER_TB_NAME)
-    hUserTB.deleteTB(USER_TB_NAME)
+    # hUserTB.deleteTB(USER_TB_NAME)
 
     # hUserTB.isExistUser(USER_TB_NAME, Test_USER_INFO)
     # Test_USER_INFO = {'uid': DB_USER, 'passwd': DB_PASSWD, 'privilege': False}
