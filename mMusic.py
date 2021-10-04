@@ -30,8 +30,9 @@ class HandleDB:
         logger.debug("Deleting HandleDB Class")
         self.dbCon.close()
 
-    def __sendQuery(self, SQL, data=(), mode=""):
-        logger.debug("__sendQuery with SQL = [%s] and data = [%s]", SQL, data)
+    def sendQuery(self, SQL, data=(), mode=""):
+        logger.debug(
+            "sendQuery with SQL = [%s] and data = [%s]", SQL, data)
 
         try:
             cursor = self.dbCon.cursor()
@@ -45,8 +46,8 @@ class HandleDB:
 
         except MySQLdb.Error as e:
             logger.error(
-                "Error in __sendQuery() with SQL = [%s] and data = [%s]", SQL, data)
-            logger.error("Error in __sendQuery() with error messsage %s", e)
+                "Error in sendQuery() with SQL = [%s] and data = [%s]", SQL, data)
+            logger.error("Error in sendQuery() with error messsage %s", e)
 
             if (mode == "DML"):
                 self.dbCon.rollback()
@@ -59,7 +60,7 @@ class HandleDB:
             "Checking the existence of the database [%s]", dbName)
 
         sql = """Show databases like '{db}';""".format(db=dbName)
-        return len(self.__sendQuery(sql)) > 0
+        return len(self.sendQuery(sql)) > 0
 
     def makeDB(self, dbName):
         if(not self.isExistDB(dbName)):
@@ -68,7 +69,7 @@ class HandleDB:
 
             sql = """CREATE DATABASE IF NOT EXISTS {db};""".format(
                 db=dbName)
-            return self.__sendQuery(sql) != None
+            return self.sendQuery(sql) != None
         else:
             logger.debug("The database [%s] exists", dbName)
             return False
@@ -79,41 +80,49 @@ class HandleDB:
 
             sql = """DROP DATABASE IF EXISTS {db};""".format(
                 db=dbName)
-            return self.__sendQuery(sql) != None
+            return self.sendQuery(sql) != None
         else:
             logger.debug(
                 "Cannot find the database [%s] and thus cannot delete it", dbName)
             return False
 
 
-class HandleUserTB():
+class HandleUserDB(HandleDB):
 
-    def __init__(self, hDB, dbName):
+    def __init__(self, dbHost, dbUser, dbPasswd, dbName, tbName):
         logger.debug("Initializing HandleUserDB Class")
+        super().__init__(dbHost, dbUser, dbPasswd)
 
-        self.hDB = hDB
         self.dbName = dbName
+        self.tbName = tbName
+
+        if(not self.isExistDB(dbName)):
+            self.makeDB(dbName)
+
+        if(not self.isExistTB(dbName, tbName)):
+            self.makeTB(dbName, tbName)
 
     def __del__(self):
         logger.debug("Deleting HandleUserDB Class")
+        super().__del__
 
-    def isExistTB(self, tbName):
+    def isExistTB(self, dbName, tbName):
 
-        if (self.hDB.isExistDB(self.dbName)):
+        if (self.isExistDB(dbName)):
             logger.debug(
-                "Checking the existence of the user table [%s] in the database [%s]", tbName, self.dbName)
+                "Checking the existence of the user table [%s] in the database [%s]", tbName, dbName)
 
             sql = """Show tables in {db} like '{tb}';""".format(
                 db=self.dbName, tb=tbName)
 
-            return len(self.__sendQuery(sql)) > 0
+            return len(self.sendQuery(sql)) > 0
         else:
-            logger.debug("There is no database [%s]", self.dbName)
+            logger.debug("There is no database [%s]", dbName)
             return False
 
-    def makeTB(self, tbName):
-        if (self.hDB.isExistDB(self.dbName)):
-            if(not self.isExistTB(tbName)):
+    def makeTB(self, dbName, tbName):
+        if (self.isExistDB(dbName)):
+            if(not self.isExistTB(dbName, tbName)):
                 logger.debug(
                     "Cannot find the user table [%s] in the database [%s]", tbName, self.dbName)
                 logger.debug(
@@ -126,35 +135,35 @@ class HandleUserTB():
                         privilege	boolean     DEFAULT false,
                         deleteflag	boolean     DEFAULT false,
                         PRIMARY KEY (idUser)
-                        ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=tbName)
+                        ) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=tbName)
 
-                return self.hDB.__sendQuery(sql) != None
+                return self.sendQuery(sql) != None
             else:
                 logger.debug(
-                    "The user table [%s] in database [%s] exists", tbName, self.dbName)
+                    "The user table [%s] in database [%s] exists", tbName, dbName)
                 return False
         else:
             logger.debug(
-                "There is no database [%s]", self.dbName)
+                "There is no database [%s]", dbName)
             return False
 
-    def deleteTB(self, tbName):
-        if(self.isExistTB(self.dbName, tbName)):
+    def deleteTB(self, dbName, tbName):
+        if(self.isExistTB(dbName, tbName)):
             logger.debug(
-                "Deleting the user table [%s] in the database [%s]", tbName, self.dbName)
+                "Deleting the user table [%s] in the database [%s]", tbName, dbName)
 
             sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(
-                db=self.dbName, tb=tbName)
-            return self.hDB.__sendQuery(sql) != None
+                db=dbName, tb=tbName)
+            return self.sendQuery(sql) != None
         else:
             logger.debug(
-                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", tbName, self.dbName)
+                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", tbName, dbName)
             return False
 
-    def isExistUser(self, tbName, userInfo):  # , wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
+    # def isExistUser(self, tbName, userInfo):  # , wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
 
-        if (userInfo['uid']):
-            wh = """where loginID='{uid}'""".format(uid=userInfo['uid'])
+    #     if (userInfo['uid']):
+    #         wh = """where loginID='{uid}'""".format(uid=userInfo['uid'])
 
         # logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
         #              userInfo['uid'], userInfo['privilege'], tbName, self.dbName)
@@ -164,7 +173,7 @@ class HandleUserTB():
         # sql = sql.format(db=self.dbName, tb=tbName,
         #                  uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
-        # return len(self.hDB.__sendQuery(sql)) > 0
+        # return len(self.hDB.sendQuery(sql)) > 0
 
     def addUser(self, tbName, userInfo):
         pass
@@ -175,7 +184,7 @@ class HandleUserTB():
     def isExistUID(self, tbName, userInfo):
         pass
 
-    def __isFirstUser(self, tbName, userInfo):
+    def isFirstUser(self, tbName, userInfo):
         pass
 
     # def addUserToTbName(self, dbName, tbName, userInfo):
@@ -190,7 +199,7 @@ class HandleUserTB():
     #         sql = sql.format(
     #             db=dbName, tb=tbName, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
-    #         return self.hDB.__sendQuery(sql, mode="DML")
+    #         return self.hDB.sendQuery(sql, mode="DML")
 
     # def isFirstUser(self, dbName, tbName):
     #     logger.debug(
@@ -208,10 +217,10 @@ class HandleUserTB():
 if __name__ == "__main__":
 
     # setting define directory
-    DB_NAME = "Home_Music"
     DB_HOST = "192.168.35.215"
     DB_USER = "kodi"
     DB_PASSWD = "kodi"
+    DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
     HOME_DIR = "/common/Musics/"
 
@@ -224,24 +233,20 @@ if __name__ == "__main__":
     logger.addHandler(streamHandler)
     logger.setLevel(logging.DEBUG)
 
-    hDB = HandleDB(DB_HOST, DB_USER, DB_PASSWD)
-    hDB.makeDB(DB_NAME)
-    # hDB.deleteDB(DB_NAME)
+    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    hUserDB.sendQuery("""DROP TABLE IF EXISTS {db}.{tb};""".format(
+        db=DB_NAME, tb=USER_TB_NAME))
 
-    hUserTB = HandleUserTB(hDB, DB_NAME)
 
-    hUserTB.makeTB(USER_TB_NAME)
-    # hUserTB.deleteTB(USER_TB_NAME)
+# hUserTB.isExistUser(USER_TB_NAME, Test_USER_INFO)
+# Test_USER_INFO = {'uid': DB_USER, 'passwd': DB_PASSWD, 'privilege': False}
+# Test_USER_INFO = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
+# Test_USER_INFO = {'uid': "", 'passwd': "", 'privilege': False}
 
-    # hUserTB.isExistUser(USER_TB_NAME, Test_USER_INFO)
-    # Test_USER_INFO = {'uid': DB_USER, 'passwd': DB_PASSWD, 'privilege': False}
-    # Test_USER_INFO = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
-    # Test_USER_INFO = {'uid': "", 'passwd': "", 'privilege': False}
+# wh = """where """
 
-    # wh = """where """
+# if (Test_USER_INFO['uid']):
 
-    # if (Test_USER_INFO['uid']):
+# wh = wh+"""loginID='{uid}'""".format(uid=Test_USER_INFO['uid'])
 
-    # wh = wh+"""loginID='{uid}'""".format(uid=Test_USER_INFO['uid'])
-
-    # print(len(Test_USER_INFO))
+# print(len(Test_USER_INFO))
