@@ -10,8 +10,6 @@ import MySQLdb
 import logging
 import logging.handlers
 
-from bs4.element import ProcessingInstruction
-
 
 class HandleDB:
 
@@ -86,6 +84,37 @@ class HandleDB:
                 "Cannot find the database [%s] and thus cannot delete it", dbName)
             return False
 
+    def isExistTB(self, dbName, tbName):
+
+        if (self.isExistDB(dbName)):
+            logger.debug(
+                "Checking the existence of the user table [%s] in the database [%s]", tbName, dbName)
+
+            sql = """Show tables in {db} like '{tb}';""".format(
+                db=dbName, tb=tbName)
+
+            return len(self.sendQuery(sql)) > 0
+        else:
+            logger.debug("There is no database [%s]", dbName)
+            return False
+
+    def makeTB(self):
+        # design eto rewrite the methon in the child class
+        pass
+
+    def deleteTB(self, dbName, tbName):
+        if(self.isExistTB(dbName, tbName)):
+            logger.debug(
+                "Deleting the user table [%s] in the database [%s]", tbName, dbName)
+
+            sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(
+                db=dbName, tb=tbName)
+            return self.sendQuery(sql) != None
+        else:
+            logger.debug(
+                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", tbName, dbName)
+            return False
+
 
 class HandleUserDB(HandleDB):
 
@@ -96,29 +125,15 @@ class HandleUserDB(HandleDB):
         self.dbName = dbName
         self.tbName = tbName
 
-        if(not self.isExistDB(dbName)):
-            self.makeDB(dbName)
+        if(not self.isExistDB(self.dbName)):
+            self.makeDB(self.dbName)
 
-        if(not self.isExistTB(dbName, tbName)):
-            self.makeTB(dbName, tbName)
+        if(not self.isExistTB(self.dbName, self.tbName)):
+            self.makeTB(self.dbName, self.tbName)
 
     def __del__(self):
         logger.debug("Deleting HandleUserDB Class")
-        super().__del__
-
-    def isExistTB(self, dbName, tbName):
-
-        if (self.isExistDB(dbName)):
-            logger.debug(
-                "Checking the existence of the user table [%s] in the database [%s]", tbName, dbName)
-
-            sql = """Show tables in {db} like '{tb}';""".format(
-                db=self.dbName, tb=tbName)
-
-            return len(self.sendQuery(sql)) > 0
-        else:
-            logger.debug("There is no database [%s]", dbName)
-            return False
+        super().__del__()
 
     def makeTB(self, dbName, tbName):
         if (self.isExistDB(dbName)):
@@ -147,33 +162,20 @@ class HandleUserDB(HandleDB):
                 "There is no database [%s]", dbName)
             return False
 
-    def deleteTB(self, dbName, tbName):
-        if(self.isExistTB(dbName, tbName)):
-            logger.debug(
-                "Deleting the user table [%s] in the database [%s]", tbName, dbName)
-
-            sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(
-                db=dbName, tb=tbName)
-            return self.sendQuery(sql) != None
-        else:
-            logger.debug(
-                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", tbName, dbName)
-            return False
-
-    # def isExistUser(self, tbName, userInfo):  # , wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
+    # def isExistUser(self, userInfo):  # , wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
 
     #     if (userInfo['uid']):
     #         wh = """where loginID='{uid}'""".format(uid=userInfo['uid'])
 
-        # logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
-        #              userInfo['uid'], userInfo['privilege'], tbName, self.dbName)
+    #     logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
+    #                  userInfo['uid'], userInfo['privilege'], self.tbName, self.dbName)
 
-        # # need space between table name and where
-        # sql = """select * from {db}.{tb}""" + " " + wh
-        # sql = sql.format(db=self.dbName, tb=tbName,
-        #                  uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+    #     # need space between table name and where
+    #     sql = """select * from {db}.{tb}""" + " " + wh
+    #     sql = sql.format(db=self.dbName, tb=self.tbName,
+    #                      uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
-        # return len(self.hDB.sendQuery(sql)) > 0
+    #     return len(self.sendQuery(sql)) > 0
 
     def addUser(self, tbName, userInfo):
         pass
@@ -234,9 +236,6 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
 
     hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
-    hUserDB.sendQuery("""DROP TABLE IF EXISTS {db}.{tb};""".format(
-        db=DB_NAME, tb=USER_TB_NAME))
-
 
 # hUserTB.isExistUser(USER_TB_NAME, Test_USER_INFO)
 # Test_USER_INFO = {'uid': DB_USER, 'passwd': DB_PASSWD, 'privilege': False}
