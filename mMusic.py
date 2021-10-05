@@ -162,58 +162,93 @@ class HandleUserDB(HandleDB):
                 "There is no database [%s]", dbName)
             return False
 
-    # def isExistUser(self, userInfo):  # , wh="""where loginID='{uid}' and passwd='{pwd}' and privilege={pr}"""):
+    def isExistUser(self, userInfo):
+        logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
+                     userInfo['uid'], userInfo['privilege'], self.tbName, self.dbName)
 
-    #     if (userInfo['uid']):
-    #         wh = """where loginID='{uid}'""".format(uid=userInfo['uid'])
+        wh = """where """
 
-    #     logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
-    #                  userInfo['uid'], userInfo['privilege'], self.tbName, self.dbName)
+        if (userInfo['uid'] != ""):
+            wh = wh + " and " if len(wh) > 6 else wh
+            wh = wh + """loginID='{uid}'""".format(uid=userInfo['uid'])
 
-    #     # need space between table name and where
-    #     sql = """select * from {db}.{tb}""" + " " + wh
-    #     sql = sql.format(db=self.dbName, tb=self.tbName,
-    #                      uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+        if (userInfo['passwd'] != ""):
+            wh = wh + " and " if len(wh) > 6 else wh
+            wh = wh+"""passwd='{pwd}'""".format(pwd=userInfo['passwd'])
 
-    #     return len(self.sendQuery(sql)) > 0
+        if (userInfo['privilege'] != ""):
+            wh = wh + " and " if len(wh) > 6 else wh
+            wh = wh + """privilege={pr}""".format(pr=userInfo['privilege'])
 
-    def addUser(self, tbName, userInfo):
-        pass
+        wh = "" if len(wh) <= 6 else wh
 
-    def rmUser(self, tbName, userInfo):
-        pass
+        # need space between table name and where
+        sql = """select * from {db}.{tb}""".format(
+            db=self.dbName, tb=self.tbName) + " " + wh + ";"
 
-    def isExistUID(self, tbName, userInfo):
-        pass
+        return len(self.sendQuery(sql)) > 0
 
-    def isFirstUser(self, tbName, userInfo):
-        pass
+    def isExistUID(self, uID):
+        logger.debug(
+            "Checking if the user ID [%s] exists in User_Table.", userInfo['uid'])
+        dummyUser = {'uid': uID, 'passwd': "", 'privilege': ""}
 
-    # def addUserToTbName(self, dbName, tbName, userInfo):
-        # if (self.hDB.isExistTB(dbName, tbName)):
-        #     if(self.isFirstUser(dbName))
-        # else:
+        return self.isExistUser(dummyUser)
 
-    #         logger.debug(
-    #             "Add userInfo [%s] to the user table [%s] in the database [%s]", userInfo, tbName, dbName)
+    def isFirstUser(self):
+        logger.debug(
+            "Checking if you are the first user. The first user can have all privilege")
+        dummyUser = {'uid': "", 'passwd': "", 'privilege': ""}
 
-    #         sql = """insert into {db}.{tb} (loginID, passwd, privilege) values ('{uid}','{pwd}',{pr})"""
-    #         sql = sql.format(
-    #             db=dbName, tb=tbName, uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+        return not self.isExistUser(dummyUser)
 
-    #         return self.hDB.sendQuery(sql, mode="DML")
+    def addUserAccount(self, userInfo):
+        userInfo['privilege'] = True if self.isFirstUser() else False
 
-    # def isFirstUser(self, dbName, tbName):
-    #     logger.debug(
-    #         "Checking if you are the first user. The first user can have all privilege")
-    #     dummyUser = {'uid': "", 'passwd': "", 'privilege': False}
+        if (self.isExistUID(userInfo['uid'])):
+            logger.error("Your user ID [%s] exists in the user table [%s] of the database [%s]",
+                         userInfo['uid'], self.tbName, self.dbName)
+            return False
 
-    #     return not checkUser(dbCon, dbName, tbName, dummyUser, wh="")
+        else:
+            logger.debug(
+                "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
 
-    # def isExistUser(dbCon, dbName, tbName, userInfo):
-    #     logger.debug("Checking if %s exists in User_Table.", userInfo['uid'])
+            sql = """insert into {db}.{tb} (loginID, passwd, privilege) values ('{uid}','{pwd}',{pr});"""
+            sql = sql.format(db=self.dbName, tb=self.tbName,
+                             uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
-    #     return checkUser(dbCon, dbName, tbName, userInfo, wh="""where loginID='{uid}'""")
+            return True if self.sendQuery(sql, mode="DML") == None else False
+
+    def rmUserAccount(self, userInfo):
+        if (self.isExistUID(userInfo['uid'])):
+            logger.debug(
+                "Removing the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+
+            sql = """delete from {db}.{tb} where loginID= '{uid}'; """
+            sql = sql.format(db=self.dbName, tb=self.tbName,
+                             uid=userInfo['uid'])
+
+            return True if self.sendQuery(sql, mode="DML") == None else False
+        else:
+            logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be deleted",
+                         userInfo['uid'], self.tbName, self.dbName)
+            return False
+
+    def updateUserAccount(self, userInfo):
+        if (self.isExistUID(userInfo['uid'])):
+            logger.debug(
+                "Updating the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+
+            sql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{uid}'; """
+            sql = sql.format(db=self.dbName, tb=self.tbName,
+                             uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+
+            return True if self.sendQuery(sql, mode="DML") == None else False
+        else:
+            logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
+                         userInfo['uid'], self.tbName, self.dbName)
+            return False
 
 
 if __name__ == "__main__":
@@ -237,15 +272,15 @@ if __name__ == "__main__":
 
     hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
 
-# hUserTB.isExistUser(USER_TB_NAME, Test_USER_INFO)
-# Test_USER_INFO = {'uid': DB_USER, 'passwd': DB_PASSWD, 'privilege': False}
-# Test_USER_INFO = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
-# Test_USER_INFO = {'uid': "", 'passwd': "", 'privilege': False}
+# hUserTB.isExistUser(USER_TB_NAME, userInfo)
+    # userInfo = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
+    # userInfo = {'uid': "", 'passwd': "", 'privilege': False}
+    userInfo = {'uid': DB_USER, 'passwd': "ll", 'privilege': True}
+    # userInfo = {'uid': "kk", 'passwd': "kk", 'privilege': False}
 
-# wh = """where """
-
-# if (Test_USER_INFO['uid']):
-
-# wh = wh+"""loginID='{uid}'""".format(uid=Test_USER_INFO['uid'])
-
-# print(len(Test_USER_INFO))
+    # print(hUserDB.isExistUser(userInfo))
+    print(hUserDB.isExistUID(userInfo['uid']))
+    print(hUserDB.isFirstUser())
+    # print(hUserDB.addUserAccount(userInfo))
+    print(hUserDB.updateUserAccount(userInfo))
+    print(hUserDB.rmUserAccount(userInfo))
