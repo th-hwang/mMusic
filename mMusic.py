@@ -302,7 +302,16 @@ class HandleMusicDB(HandleDB):
                 "There is no database [%s]", dbName)
             return False
 
-    def isExistMusic():
+    def isExistMusic(self):
+        pass
+
+    def addMusicRecord(self):
+        pass
+
+    def rmMusicRecord(self):
+        pass
+
+    def updateMusicrecord(self):
         pass
 
 
