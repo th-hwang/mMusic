@@ -139,9 +139,9 @@ class HandleUserDB(HandleDB):
         if (self.isExistDB(dbName)):
             if(not self.isExistTB(dbName, tbName)):
                 logger.debug(
-                    "Cannot find the user table [%s] in the database [%s]", tbName, self.dbName)
+                    "Cannot find the user table [%s] in the database [%s]", tbName, dbName)
                 logger.debug(
-                    "Creating the user table [%s] in the database [%s]", tbName, self.dbName)
+                    "Creating the user table [%s] in the database [%s]", tbName, dbName)
 
                 sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                         idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
@@ -251,6 +251,61 @@ class HandleUserDB(HandleDB):
             return False
 
 
+class HandleMusicDB(HandleDB):
+
+    def __init__(self, dbHost, dbUser, dbPasswd, dbName, tbName):
+        logger.debug("Initializing HandleMusicDB Class")
+        super().__init__(dbHost, dbUser, dbPasswd)
+
+        self.dbName = dbName
+        self.tbName = tbName
+
+        if(not self.isExistDB(self.dbName)):
+            self.makeDB(self.dbName)
+
+        if(not self.isExistTB(self.dbName, self.tbName)):
+            self.makeTB(self.dbName, self.tbName)
+
+    def __del__(self):
+        logger.debug("Deleting HandleMusicDB Class")
+        super().__del__()
+
+    def makeTB(self, dbName, tbName):
+        if (self.isExistDB(dbName)):
+            if(not self.isExistTB(dbName, tbName)):
+                logger.debug(
+                    "Cannot find the music table [%s] in the database [%s]", tbName, dbName)
+                logger.debug(
+                    "Creating the music table [%s] in the database [%s]", tbName, dbName)
+
+                sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
+                        idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
+                        title		varchar(256),
+                        artist 		varchar(256),
+                        album 		varchar(256),
+                        sdate 		date,
+                        genre 		varchar(32),
+                        filename 	varchar(256),
+                        currentrank	int		unsigned,
+                        favor		int		unsigned,
+                        deleteflag	int		unsigned,
+                        PRIMARY KEY (idmusic)
+                        ) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=tbName)
+
+                return self.sendQuery(sql) != None
+            else:
+                logger.debug(
+                    "The user table [%s] in database [%s] exists", tbName, dbName)
+                return False
+        else:
+            logger.debug(
+                "There is no database [%s]", dbName)
+            return False
+
+    def isExistMusic():
+        pass
+
+
 if __name__ == "__main__":
 
     # setting define directory
@@ -260,6 +315,7 @@ if __name__ == "__main__":
     DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
     HOME_DIR = "/common/Musics/"
+    TEMP_UID = "karlken"
 
     logger = logging.getLogger(DB_USER)
     fomatter = logging.Formatter(
@@ -271,6 +327,7 @@ if __name__ == "__main__":
     logger.setLevel(logging.DEBUG)
 
     hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
 
 # hUserTB.isExistUser(USER_TB_NAME, userInfo)
     # userInfo = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
@@ -279,8 +336,8 @@ if __name__ == "__main__":
     # userInfo = {'uid': "kk", 'passwd': "kk", 'privilege': False}
 
     # print(hUserDB.isExistUser(userInfo))
-    print(hUserDB.isExistUID(userInfo['uid']))
-    print(hUserDB.isFirstUser())
-    # print(hUserDB.addUserAccount(userInfo))
-    print(hUserDB.updateUserAccount(userInfo))
-    print(hUserDB.rmUserAccount(userInfo))
+    # print(hUserDB.isExistUID(userInfo['uid']))
+    # print(hUserDB.isFirstUser())
+    print(hUserDB.addUserAccount(userInfo))
+    # print(hUserDB.updateUserAccount(userInfo))
+    # print(hUserDB.rmUserAccount(userInfo))
