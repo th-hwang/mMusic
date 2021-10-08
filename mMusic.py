@@ -163,91 +163,86 @@ class HandleUserDB(HandleDB):
             return False
 
     def isExistUser(self, userInfo):
-        logger.debug("Checking the existence of the user [%s] with previlege [%s] in the user table [%s] of the database [%s]",
-                     userInfo['uid'], userInfo['privilege'], self.tbName, self.dbName)
+        logger.debug(
+            "Checking the existence of the user in the user table [%s] of the database [%s]", self.tbName, self.dbName)
 
         wh = """where """
+        for key, value in userInfo.items():
+            if not value == "":
+                if len(wh) > len("where "):
+                    wh = wh + " and "
+                if type(value) == str:
+                    wh = wh + \
+                        """{key}='{value}'""".format(key=key, value=value)
+                else:
+                    wh = wh + """{key}={value}""".format(key=key, value=value)
 
-        if (userInfo['uid'] != ""):
-            wh = wh + " and " if len(wh) > 6 else wh
-            wh = wh + """loginID='{uid}'""".format(uid=userInfo['uid'])
-
-        if (userInfo['passwd'] != ""):
-            wh = wh + " and " if len(wh) > 6 else wh
-            wh = wh+"""passwd='{pwd}'""".format(pwd=userInfo['passwd'])
-
-        if (userInfo['privilege'] != ""):
-            wh = wh + " and " if len(wh) > 6 else wh
-            wh = wh + """privilege={pr}""".format(pr=userInfo['privilege'])
-
-        wh = "" if len(wh) <= 6 else wh
+        wh = wh + ";" if len(wh) > len("where ") else ";"
 
         # need space between table name and where
         sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + " " + wh + ";"
+            db=self.dbName, tb=self.tbName) + " " + wh
 
         return len(self.sendQuery(sql)) > 0
 
-    def isExistUID(self, uID):
+    def isExistLoginID(self, loginID):
         logger.debug(
-            "Checking if the user ID [%s] exists in User_Table.", userInfo['uid'])
-        dummyUser = {'uid': uID, 'passwd': "", 'privilege': ""}
+            "Checking if the user ID [%s] exists in User_Table.", loginID)
 
-        return self.isExistUser(dummyUser)
+        return self.isExistUser({'loginID': loginID})
 
     def isFirstUser(self):
         logger.debug(
             "Checking if you are the first user. The first user can have all privilege")
-        dummyUser = {'uid': "", 'passwd': "", 'privilege': ""}
 
-        return not self.isExistUser(dummyUser)
+        return not self.isExistUser({})
 
     def addUserAccount(self, userInfo):
         userInfo['privilege'] = True if self.isFirstUser() else False
 
-        if (self.isExistUID(userInfo['uid'])):
+        if (self.isExistLoginID(userInfo['loginID'])):
             logger.error("Your user ID [%s] exists in the user table [%s] of the database [%s]",
-                         userInfo['uid'], self.tbName, self.dbName)
+                         userInfo['loginID'], self.tbName, self.dbName)
             return False
 
         else:
             logger.debug(
                 "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
 
-            sql = """insert into {db}.{tb} (loginID, passwd, privilege) values ('{uid}','{pwd}',{pr});"""
+            sql = """insert into {db}.{tb} (loginID, passwd, privilege) values ('{loginID}','{pwd}',{pr});"""
             sql = sql.format(db=self.dbName, tb=self.tbName,
-                             uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+                             loginID=userInfo['loginID'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
             return True if self.sendQuery(sql, mode="DML") == None else False
 
     def rmUserAccount(self, userInfo):
-        if (self.isExistUID(userInfo['uid'])):
+        if (self.isExistLoginID(userInfo['loginID'])):
             logger.debug(
                 "Removing the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
 
-            sql = """delete from {db}.{tb} where loginID= '{uid}'; """
+            sql = """delete from {db}.{tb} where loginID= '{loginID}'; """
             sql = sql.format(db=self.dbName, tb=self.tbName,
-                             uid=userInfo['uid'])
+                             loginID=userInfo['loginID'])
 
             return True if self.sendQuery(sql, mode="DML") == None else False
         else:
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be deleted",
-                         userInfo['uid'], self.tbName, self.dbName)
+                         userInfo['loginID'], self.tbName, self.dbName)
             return False
 
     def updateUserAccount(self, userInfo):
-        if (self.isExistUID(userInfo['uid'])):
+        if (self.isExistLoginID(userInfo['loginID'])):
             logger.debug(
                 "Updating the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
 
-            sql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{uid}'; """
+            sql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{loginID}'; """
             sql = sql.format(db=self.dbName, tb=self.tbName,
-                             uid=userInfo['uid'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
+                             loginID=userInfo['loginID'], pwd=userInfo['passwd'], pr=userInfo['privilege'])
 
             return True if self.sendQuery(sql, mode="DML") == None else False
         else:
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
-                         userInfo['uid'], self.tbName, self.dbName)
+                         userInfo['loginID'], self.tbName, self.dbName)
             return False
 
 
@@ -302,16 +297,19 @@ class HandleMusicDB(HandleDB):
                 "There is no database [%s]", dbName)
             return False
 
-    def isExistMusic(self):
+    def isExistMusic(self, musicInfo):
         pass
 
-    def addMusicRecord(self):
+    def isExistMusicTitle(self, title):
+        pass
+    
+    def addMusicRecord(self, musicInfo):
         pass
 
-    def rmMusicRecord(self):
+    def rmMusicRecord(self, musicInfo):
         pass
 
-    def updateMusicrecord(self):
+    def updateMusicrecord(self, musicInfo):
         pass
 
 
@@ -334,19 +332,7 @@ if __name__ == "__main__":
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
     logger.setLevel(logging.DEBUG)
+    # logger.setLevel(logging.INFO)
 
-    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_ßNAME)
     hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
-
-# hUserTB.isExistUser(USER_TB_NAME, userInfo)
-    # userInfo = {'uid': "", 'passwd': DB_PASSWD, 'privilege': False}
-    # userInfo = {'uid': "", 'passwd': "", 'privilege': False}
-    userInfo = {'uid': DB_USER, 'passwd': "ll", 'privilege': True}
-    # userInfo = {'uid': "kk", 'passwd': "kk", 'privilege': False}
-
-    # print(hUserDB.isExistUser(userInfo))
-    # print(hUserDB.isExistUID(userInfo['uid']))
-    # print(hUserDB.isFirstUser())
-    print(hUserDB.addUserAccount(userInfo))
-    # print(hUserDB.updateUserAccount(userInfo))
-    # print(hUserDB.rmUserAccount(userInfo))
