@@ -141,9 +141,9 @@ def deleteUserDir(strDir):
         except:
             logger.error("Error in deleteUserDir().")
             raise
+
+
 # Handling Music Files
-
-
 def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
     logger.debug("Adding musics list ---")
 
