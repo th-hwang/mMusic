@@ -6,7 +6,7 @@ import re
 import os
 import shutil
 import subprocess
-import mutagen
+
 import datetime
 import sys
 
@@ -258,31 +258,6 @@ def parsingSong(mutagenObj, frameID):
             return str(mutagenObj[frameID].text[0], 'utf8')
 
 
-def isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag):
-    return isInMusicDB(dbCon, dbName, musicTB, tag, mode="artist") and isInMusicDB(dbCon, dbName, musicTB, tag, mode="title")
-
-
-def isInMusicDB(dbCon, dbName, musicTB, tag, mode='title'):
-    logger.debug("checking if {fn} exsists in music DB".format(fn=tag[mode]))
-
-    sql = """select * from {db}.{tb} where {md} like '%%{da}%%'"""
-    sql = sql.format(db=dbName, tb=musicTB, md=mode, da=simplify(tag[mode]))
-
-    return sendQuery(dbCon, sql)
-
-
-def insertMusicRecord(dbCon, dbName, musicTB, tag):
-    logger.debug("inserting tag data into music TB {mtb}".format(mtb=musicTB))
-
-    sql = """insert into {db}.{tb} (title, artist, album, sdate, genre, filename, currentrank, favor, deleteflag) 
-                            values ("{ti}", "{ar}", "{al}", {sd}, "{ge}", "{fi}", {cu}, {fa}, {de})"""
-    sql = sql.format(db=dbName, tb=musicTB, ti=simplify(tag['title']), ar=simplify(tag['artist']), al=simplify(tag['album']),
-                     sd=tag['sdate'], ge=simplify(tag['genre']), cu=tag['currentrank'], fa=tag['favor'],
-                     de=tag['deleteflag'], fi=simplify(tag['filename']))
-
-    return sendQuery(dbCon, sql, mode="DML")
-
-
 def updateMusicDB(dbCon, dbName, musicTB, musicDir):  # musicDir should be list
     logger.info("Updating Database .....")
 
@@ -517,16 +492,6 @@ if __name__ == "__main__":
 
     logger.setLevel(logging.INFO)
     # logger.setLevel(logging.DEBUG)
-    # setup database connection and make tables in database
-    dbCon = connectDB(DB_HOST, DB_USER, DB_PASSWD)
-
-    logger.debug("Setting up the database and the table")
-    if not (existDB(dbCon, DB_NAME)):
-        makeDB(dbCon, DB_NAME)
-        makeUserTB(dbCon, DB_NAME, USER_TB)
-    elif not (existTB(dbCon, DB_NAME, USER_TB)):
-        makeUserTB(dbCon, DB_NAME, USER_TB)
-    logger.debug("Success to set up the database and the table")
 
     logger.debug("Handling argument")
 
