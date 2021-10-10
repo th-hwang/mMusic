@@ -555,18 +555,17 @@ if __name__ == "__main__":
     logger.addHandler(streamHandler)
     logger.setLevel(logging.DEBUG)
 
-    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
-    # # TEST: hUserDB
+    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    # TEST: hUserDB
     # logger.setLevel(logging.INFO)
     # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
     # test_hUserDB(hUserDB, userInfo)
-    # print(hUserDB.getUserAccount('kk'))
+    
 
     hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
-    # # TEST : hMusicDB
-    logger.setLevel(logging.INFO)
-    musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
-                 'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
-    # # hMusicDB.addMusicRecord(musicInfo)
-    test_hMusicDB(hMusicDB, musicInfo)
-    # print(hMusicDB.getMusicRecordArtistTitle("lll", "kk"))
+    # TEST : hMusicDB
+    # logger.setLevel(logging.INFO)
+    # musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
+    #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
+    # test_hMusicDB(hMusicDB, musicInfo)
+    
