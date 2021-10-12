@@ -6,9 +6,13 @@
 # ver 0.4 : [bug fix] change handling escape characters
 # ver 0.5 : change to python3 and make class
 
+import os
+import shutil
+
 import logging
 import logging.handlers
 import MySQLdb
+from mutagen.id3 import ID3
 
 
 class HandleDB:
@@ -117,6 +121,7 @@ class HandleDB:
 
     def _where(self, dic):
         # make [ where key1='value1' and key2 = 'value2'; ]
+        # sql = """select * from {db}.{tb} where loginID = '{loginID}' and passwd= '{passwd}' and privilege {privilige}"""
         wh_Org = """ where """
         wh = wh_Org
         for key, value in dic.items():
@@ -133,6 +138,7 @@ class HandleDB:
 
     def _values(self, dic):
         # make [ (key1, key2, key3) values ('value1','value2', 'value3'); ]
+        # sql = """insert {db}.{tb} (loginID, passwd, privilege) values ('{loginID}', '{passwd}', {privilige})"""
         val_Org = " ( "
         keys = val_Org
         vals = val_Org
@@ -157,7 +163,7 @@ class HandleDB:
 
     def _set(self, dic):
         # make [ set key1 = 'value1', key2 = 'value1]
-        # ql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{loginID}'; """
+        # sql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{loginID}'; """
         se_Org = " set "
         se = se_Org
 
@@ -241,6 +247,9 @@ class HandleUserDB(HandleDB):
             "Checking if you are the first user. The first user can have all privilege")
 
         return not self.isExistUser({})
+
+    def isAdminLogindID(self, loginID):
+        return self.getUserAccount(loginID)[0]['privilege']
 
     def addUserAccount(self, userInfo):
 
@@ -452,6 +461,57 @@ class HandleMusicDB(HandleDB):
             return False
 
 
+class HandleFile():
+    def mkDir(self, strDir):
+        if not os.access(strDir, os.F_OK):
+            try:
+                return os.makedirs(strDir, mode=0o775)
+            except:
+                logger.error("Error in mkDir() [%s]", strDir)
+                raise
+        else:
+            logger.error("Error in rmDir(). [%s] is not accessible", strDir)
+            raise
+
+    def rmDir(self, strDir):
+        if os.access(strDir, os.F_OK):
+            try:
+                return shutil.rmtree(strDir)
+            except:
+                logger.error("Error in rmDir() [%s]", strDir)
+                raise
+        else:
+            logger.error("Error in rmDir(). [%s] is not accessible", strDir)
+            raise
+
+    def mkFileList(self, fileList):
+        if not type(fileList) is list:
+            fList = []
+            fList.append(fileList)
+
+        try:
+            result = []
+            for ff in fList:
+                if(os.path.isdir(ff)):
+                    logger.info(
+                        "%s is directory. Walk into the directory " % ff)
+                    if os.listdir(ff):
+                        for (path, dirs, files) in os.walk(ff):
+                            for ff2 in files:
+                                fName = os.path.abspath(
+                                    os.path.join(path, ff2))
+                                result.append(fName)
+                    else:
+                        logger.info("[Skip] " + ff +
+                                    " is empty .......... [Skip]")
+                else:
+                    result.append(os.path.abspath(ff))
+            return result
+        except:
+            logger.error("Error in mkFileList() input = %s", fileList)
+            raise
+
+
 def showall(hDB):
     print(hDB._sendQuery(
         "select * from {db}.{tb}".format(db=hDB.dbName, tb=hDB.tbName)))
@@ -555,17 +615,23 @@ if __name__ == "__main__":
     logger.addHandler(streamHandler)
     logger.setLevel(logging.DEBUG)
 
-    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
     # TEST: hUserDB
     # logger.setLevel(logging.INFO)
     # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
     # test_hUserDB(hUserDB, userInfo)
-    
 
-    hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
+    # hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
     # TEST : hMusicDB
     # logger.setLevel(logging.INFO)
     # musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
     #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
     # test_hMusicDB(hMusicDB, musicInfo)
-    
+
+    # hFile = HandleFile()
+    # print(hFile.mkFileList("/Users/taehyunghwang/pyWorks/mMusic/imsi"))
+
+    # tag = ID3("002.mp3")
+    # print(tag['TIT2'].text[0])
+    # hMusicDB.addMusicRecord(
+    #     {'title': tag['TIT2'].text[0], 'artist': tag['TPE1'].text[0]})
