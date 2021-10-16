@@ -32,12 +32,17 @@ class HandleDB:
         logger.debug("Deleting HandleDB Class")
         self.dbCon.close()
 
-    def _sendQuery(self, SQL, data=(), mode=""):
+    def _sendQuery(self, SQL, data={}, mode=""):
         logger.debug(
             "_sendQuery with SQL = [%s] and data = [%s]", SQL, data)
 
         try:
             cursor = self.dbCon.cursor()
+
+            # Database name, table name 은 일반적으로 사용자 입력변수가 아니므로,
+            # cursor.execuet("CREATE DATABASE %s",("dbNmae",)) 형태로 사용할 수 없음.
+            # 그래서 sql.format() 형태로 string에서 직접변환함. sql injection 방지를 위해 escape_string()함.
+            # data 인자가 1개일 경우 tuple ("1",) 로 써야함. (1) -> 1, (1,) -> (1,) 로 인식함.
             cursor.execute(SQL, data)
 
             if (mode == "DML"):
@@ -57,49 +62,54 @@ class HandleDB:
         finally:
             cursor.close()
 
+    def _escStr(self, s):
+        return self.dbCon.escape_string(s).decode('utf-8')
+
     def isExistDB(self, dbName):
         logger.debug(
-            "Checking the existence of the database [%s]", dbName)
+            "Checking the existence of the database [%s]", self._escStr(dbName))
 
-        sql = """Show databases like '{db}';""".format(db=dbName)
+        sql = """Show databases like '{db}';""".format(db=self._escStr(dbName))
+
         return len(self._sendQuery(sql)) > 0
 
     def makeDB(self, dbName):
         if(not self.isExistDB(dbName)):
-            logger.debug("Cannot find the database [%s]", dbName)
-            logger.debug("Creating the database [%s]", dbName)
+            logger.debug("Cannot find the database [%s]", self._escStr(dbName))
+            logger.debug("Creating the database [%s]", self._escStr(dbName))
 
             sql = """CREATE DATABASE IF NOT EXISTS {db};""".format(
-                db=dbName)
+                db=self._escStr(dbName))
             return self._sendQuery(sql) != None
         else:
-            logger.debug("The database [%s] exists", dbName)
+            logger.debug("The database [%s] exists", self._escStr(dbName))
             return False
 
     def deleteDB(self, dbName):
         if(self.isExistDB(dbName)):
-            logger.debug("Deleting the database [%s]", dbName)
+            logger.debug("Deleting the database [%s]", self._escStr(dbName))
 
             sql = """DROP DATABASE IF EXISTS {db};""".format(
-                db=dbName)
+                db=self._escStr(dbName))
+
             return self._sendQuery(sql) != None
         else:
             logger.debug(
-                "Cannot find the database [%s] and thus cannot delete it", dbName)
+                "Cannot find the database [%s] and thus cannot delete it", self._escStr(dbName))
             return False
 
     def isExistTB(self, dbName, tbName):
 
         if (self.isExistDB(dbName)):
             logger.debug(
-                "Checking the existence of the user table [%s] in the database [%s]", tbName, dbName)
+                "Checking the existence of the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
 
             sql = """Show tables in {db} like '{tb}';""".format(
-                db=dbName, tb=tbName)
+                db=self._escStr(dbName), tb=self._escStr(tbName))
 
             return len(self._sendQuery(sql)) > 0
         else:
-            logger.debug("There is no database [%s]", dbName)
+            logger.debug("There is no database [%s]", self._escStr(dbName))
             return False
 
     def makeTB(self):
@@ -109,36 +119,33 @@ class HandleDB:
     def deleteTB(self, dbName, tbName):
         if(self.isExistTB(dbName, tbName)):
             logger.debug(
-                "Deleting the user table [%s] in the database [%s]", tbName, dbName)
+                "Deleting the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
 
             sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(
-                db=dbName, tb=tbName)
+                db=self._escStr(dbName), tb=self._escStr(tbName))
             return self._sendQuery(sql) != None
         else:
             logger.debug(
-                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", tbName, dbName)
+                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", self._escStr(tbName), self._escStr(dbName))
             return False
 
     def _where(self, dic):
-        # make [ where key1='value1' and key2 = 'value2'; ]
-        # sql = """select * from {db}.{tb} where loginID = '{loginID}' and passwd= '{passwd}' and privilege={privilige}"""
+        # make [ where key1=%({key1})s and key2 = %({key2})s; ]
+        # sql = """select * from {db}.{tb} where loginID = %(loginID)s and passwd= %(passwd)s and privilege=%(privilige)s"""
         wh_Org = """ where """
         wh = wh_Org
         for key, value in dic.items():
             if not value == "":
                 if len(wh) > len(wh_Org):
                     wh = wh + " and "
-                if type(value) == str:
-                    wh = wh + \
-                        """{key}='{value}'""".format(key=key, value=value)
-                else:
-                    wh = wh + """{key}={value}""".format(key=key, value=value)
+
+                wh = wh + """{key}=%({key})s""".format(key=key)
 
         return wh + ";" if len(wh) > len(wh_Org) else ";"
 
     def _values(self, dic):
-        # make [ (key1, key2, key3) values ('value1','value2', 'value3'); ]
-        # sql = """insert {db}.{tb} (loginID, passwd, privilege) values ('{loginID}', '{passwd}', {privilige})"""
+        # make [ (key1, key2, key3) values (%({key1})s, %({key2})s, %({key3})s); ]
+        # sql = """insert {db}.{tb} (loginID, passwd, privilege) values (%(loginID), %(passwd)s, %(privilige))"""
         val_Org = " ( "
         keys = val_Org
         vals = val_Org
@@ -147,12 +154,9 @@ class HandleDB:
                 if len(keys) > len(val_Org):
                     keys = keys + ", "
                     vals = vals + ", "
-                if type(value) == str:
-                    keys = keys + """{key}""".format(key=key)
-                    vals = vals + """'{val}'""".format(val=value)
-                else:
-                    keys = keys + """{key}""".format(key=key)
-                    vals = vals + """{val}""".format(val=value)
+
+                keys = keys + """{key}""".format(key=key)
+                vals = vals + """%({key})s""".format(key=key)
 
         if len(keys) > len(val_Org):
             return keys + " ) values " + vals + " );"
@@ -162,8 +166,8 @@ class HandleDB:
             return
 
     def _set(self, dic):
-        # make [ set key1 = 'value1', key2 = 'value1]
-        # sql = """update {db}.{tb} set passwd='{pwd}', privilege={pr} where loginID='{loginID}'; """
+        # make [ set key1 = '%({key1})s', key2 = '%({key2})s']
+        # sql = """update {db}.{tb} set passwd='%({pwd})s', privilege=%({pr})s where loginID='%({loginID})s'; """
         se_Org = " set "
         se = se_Org
 
@@ -171,11 +175,10 @@ class HandleDB:
             if not value == "":
                 if len(se) > len(se_Org):
                     se = se + " , "
-                if type(value) == str:
-                    se = se + \
-                        """{key}='{value}'""".format(key=key, value=value)
-                else:
-                    se = se + """{key}={value}""".format(key=key, value=value)
+                # if type(value) == str:
+                #     se = se + """{key}='%({key})s'""".format(key=key)
+                # else:
+                se = se + """{key}=%({key})s""".format(key=key)
 
         return se if len(se) > len(se_Org) else ""
 
@@ -186,8 +189,8 @@ class HandleUserDB(HandleDB):
         logger.debug("Initializing HandleUserDB Class")
         super().__init__(dbHost, dbUser, dbPasswd)
 
-        self.dbName = dbName
-        self.tbName = tbName
+        self.dbName = self._escStr(dbName)
+        self.tbName = self._escStr(tbName)
 
         if(not self.isExistDB(self.dbName)):
             self.makeDB(self.dbName)
@@ -203,9 +206,9 @@ class HandleUserDB(HandleDB):
         if (self.isExistDB(dbName)):
             if(not self.isExistTB(dbName, tbName)):
                 logger.debug(
-                    "Cannot find the user table [%s] in the database [%s]", tbName, dbName)
+                    "Cannot find the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
                 logger.debug(
-                    "Creating the user table [%s] in the database [%s]", tbName, dbName)
+                    "Creating the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
 
                 sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                         idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
@@ -214,31 +217,31 @@ class HandleUserDB(HandleDB):
                         privilege	boolean     DEFAULT false,
                         deleteflag	boolean     DEFAULT false,
                         PRIMARY KEY (idUser)
-                        ) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=tbName)
+                        ) DEFAULT CHARSET=utf8;""".format(db=self._escStr(dbName), tb=self._escStr(tbName))
 
                 return self._sendQuery(sql) != None
             else:
                 logger.debug(
-                    "The user table [%s] in database [%s] exists", tbName, dbName)
+                    "The user table [%s] in database [%s] exists", self._escStr(tbName), self._escStr(dbName))
                 return False
         else:
             logger.debug(
-                "There is no database [%s]", dbName)
+                "There is no database [%s]", self._escStr(dbName))
             return False
 
     def isExistUser(self, userInfo):
         logger.debug(
-            "Checking the existence of the user in the user table [%s] of the database [%s]", self.tbName, self.dbName)
+            "Checking the existence of the user in the user table [%s] of the database [%s]", self._escStr(self.tbName), self._escStr(self.dbName))
 
         # need space between table name and where
         sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + " " + self._where(userInfo)
+            db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + " " + self._where(userInfo)
 
-        return len(self._sendQuery(sql)) > 0
+        return len(self._sendQuery(sql, userInfo)) > 0
 
     def isExistLoginID(self, loginID):
         logger.debug(
-            "Checking if the user ID [%s] exists in User_Table [%s] of the database [%s].", loginID, self.tbName, self.dbName)
+            "Checking if the user ID [%s] exists in User_Table [%s] of the database [%s].", loginID, self._escStr(self.tbName), self._escStr(self.dbName))
 
         return self.isExistUser({'loginID': loginID})
 
@@ -255,43 +258,43 @@ class HandleUserDB(HandleDB):
 
         if (self.isExistLoginID(userInfo['loginID'])):
             logger.error("Your user ID [%s] exists in the user table [%s] of the database [%s]",
-                         userInfo['loginID'], self.tbName, self.dbName)
+                         userInfo['loginID'], self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
         else:
             logger.debug(
-                "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self._escStr(self.tbName), self._escStr(self.dbName))
 
             if self.isFirstUser():
                 userInfo['privilege'] = True
 
             sql = """insert into {db}.{tb} """.format(
-                db=self.dbName, tb=self.tbName) + self._values(userInfo)
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._values(userInfo)
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data=userInfo, mode="DML") == None else False
 
     def rmUserAccount(self, loginID):
         if (self.isExistLoginID(loginID)):
             logger.debug(
-                "Removing the user ID [%s] from the user table [%s] in the database [%s]", loginID, self.tbName, self.dbName)
+                "Removing the user ID [%s] from the user table [%s] in the database [%s]", loginID, self._escStr(self.tbName), self._escStr(self.dbName))
 
             sql = """delete from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'loginID': loginID})
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._where({'loginID': loginID})
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data={'loginID': loginID}, mode="DML") == None else False
         else:
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be deleted",
-                         loginID, self.tbName, self.dbName)
+                         loginID, self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
     def getUserAccount(self, loginID):
         if (self.isExistLoginID(loginID)):
             logger.debug(
-                "Getting the userInfo of user ID [%s] from the user table [%s] in the database [%s]", loginID, self.tbName, self.dbName)
+                "Getting the userInfo of user ID [%s] from the user table [%s] in the database [%s]", loginID, self._escStr(self.tbName), self._escStr(self.dbName))
             sql = """select * from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'loginID': loginID})
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._where({'loginID': loginID})
 
-            rlt = self._sendQuery(sql)
+            rlt = self._sendQuery(sql, data={'loginID': loginID})
             if not rlt == None:
                 result = []
                 for v in rlt:
@@ -303,22 +306,22 @@ class HandleUserDB(HandleDB):
                 return None
         else:
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot get account info",
-                         loginID, self.tbName, self.dbName)
+                         loginID, self._escStr(self.tbName), self._escStr(self.dbName))
         return None
 
     def updateUserAccount(self, userInfo):
 
         if (self.isExistLoginID(userInfo['loginID'])):
             logger.debug(
-                "Updating the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Updating the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self._escStr(self.tbName), self._escStr(self.dbName))
 
-            sql = """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._set(
+            sql = """update {db}.{tb}""".format(db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._set(
                 userInfo) + self._where({'loginID': userInfo['loginID']})
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data=userInfo, mode="DML") == None else False
         else:
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
-                         userInfo['loginID'], self.tbName, self.dbName)
+                         userInfo['loginID'], self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
 
@@ -345,9 +348,9 @@ class HandleMusicDB(HandleDB):
         if (self.isExistDB(dbName)):
             if(not self.isExistTB(dbName, tbName)):
                 logger.debug(
-                    "Cannot find the music table [%s] in the database [%s]", tbName, dbName)
+                    "Cannot find the music table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
                 logger.debug(
-                    "Creating the music table [%s] in the database [%s]", tbName, dbName)
+                    "Creating the music table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
 
                 sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                         idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
@@ -363,31 +366,31 @@ class HandleMusicDB(HandleDB):
                         favor		int		unsigned,
                         deleteflag	int		unsigned,
                         PRIMARY KEY (idmusic)
-                        ) DEFAULT CHARSET=utf8;""".format(db=dbName, tb=tbName)
+                        ) DEFAULT CHARSET=utf8;""".format(db=self._escStr(dbName), tb=self._escStr(tbName))
 
                 return self._sendQuery(sql) != None
             else:
                 logger.debug(
-                    "The user table [%s] in database [%s] exists", tbName, dbName)
+                    "The user table [%s] in database [%s] exists", self._escStr(tbName), self._escStr(dbName))
                 return False
         else:
             logger.debug(
-                "There is no database [%s]", dbName)
+                "There is no database [%s]", self._escStr(dbName))
             return False
 
     def isExistMusic(self, musicInfo):
         logger.debug(
-            "Checking the existence of the music [%s] in the music table [%s] of the database [%s]", musicInfo, self.tbName, self.dbName)
+            "Checking the existence of the music [%s] in the music table [%s] of the database [%s]", musicInfo, self._escStr(self.tbName), self._escStr(self.dbName))
 
         # need space between table name and where
         sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + " " + self._where(musicInfo)
+            db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + " " + self._where(musicInfo)
 
-        return len(self._sendQuery(sql)) > 0
+        return len(self._sendQuery(sql, musicInfo)) > 0
 
     def isExistMusicArtistTitle(self, artist, title):
         logger.debug(
-            "Checking if the music info record having title [%s] and artist [%s] exists in music table [%s] of database [%s].", title, artist, self.tbName, self.dbName)
+            "Checking if the music info record having title [%s] and artist [%s] exists in music table [%s] of database [%s].", title, artist, self._escStr(self.tbName), self._escStr(self.dbName))
 
         return self.isExistMusic({'title': title, 'artist': artist})
 
@@ -395,41 +398,44 @@ class HandleMusicDB(HandleDB):
 
         if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
             logger.error("The music info record having title [%s] and artist [%s] exists in the music table [%s] of the database [%s] and thus cannot be added",
-                         musicInfo['title'], musicInfo['artist'], self.tbName, self.dbName)
+                         musicInfo['title'], musicInfo['artist'], self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
         else:
             logger.debug(
-                "Adding the music info record [%s] to the music table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+                "Adding the music info record [%s] to the music table [%s] in the database [%s]", musicInfo, self._escStr(self.tbName), self._escStr(self.dbName))
 
             sql = """insert into {db}.{tb} """.format(
-                db=self.dbName, tb=self.tbName) + self._values(musicInfo)
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._values(musicInfo)
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data=musicInfo, mode="DML") == None else False
 
     def rmMusicRecordArtistTitle(self, artist, title):
 
         if (self.isExistMusicArtistTitle(artist, title)):
             logger.debug(
-                "Removing the muisc info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]", title, artist, self.tbName, self.dbName)
+                "Removing the muisc info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]",
+                title, artist, self._escStr(self.tbName), self._escStr(self.dbName))
 
             sql = """delete from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._where({'title': title, 'artist': artist})
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}, mode="DML") == None else False
         else:
             logger.error(
-                "The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be deleted", title, artist, self.tbName, self.dbName)
+                "The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be deleted",
+                title, artist, self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
     def getMusicRecordArtistTitle(self, artist, title):
         if (self.isExistMusicArtistTitle(artist, title)):
             logger.debug(
-                "Getting the music info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]", title, artist, self.tbName, self.dbName)
+                "Getting the music info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]",
+                title, artist, self._escStr(self.tbName), self._escStr(self.dbName))
             sql = """select * from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+                db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._where({'title': title, 'artist': artist})
 
-            rlt = self._sendQuery(sql)
+            rlt = self._sendQuery(sql, data={'title': title, 'artist': artist})
             if not rlt == None:
                 result = []
                 for v in rlt:
@@ -442,22 +448,22 @@ class HandleMusicDB(HandleDB):
                 return None
         else:
             logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot get account info",
-                         title, artist, self.tbName, self.dbName)
+                         title, artist, self._escStr(self.tbName), self._escStr(self.dbName))
         return None
 
     def updateMusicRecord(self, musicInfo):
 
         if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
             logger.debug(
-                "Updating the music info record [%s] from the user table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+                "Updating the music info record [%s] from the user table [%s] in the database [%s]", musicInfo, self._escStr(self.tbName), self._escStr(self.dbName))
 
-            sql = """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._set(
+            sql = """update {db}.{tb}""".format(db=self._escStr(self.dbName), tb=self._escStr(self.tbName)) + self._set(
                 musicInfo) + self._where({'title': musicInfo['title'], 'artist': musicInfo['artist']})
 
-            return True if self._sendQuery(sql, mode="DML") == None else False
+            return True if self._sendQuery(sql, data=musicInfo, mode="DML") == None else False
         else:
             logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be updated",
-                         musicInfo['artist'], musicInfo['title'], self.tbName, self.dbName)
+                         musicInfo['artist'], musicInfo['title'], self._escStr(self.tbName), self._escStr(self.dbName))
             return False
 
 
@@ -521,6 +527,11 @@ def showall_test(hDB, wh):
 def showall_test1(hDB, wh):
     print(hDB._sendQuery("select * from %(db)s.%(tb)s where loginID = %(id)s",
           data={'db': hDB.dbName, 'tb': hDB.tbName, 'id': wh}))
+
+
+def showall_test2(hDB, wh):
+    print(hDB._sendQuery(
+        "select * from {db}.{tb} where loginID = '{wh}';".format(db=hDB.dbName, tb=hDB.tbName, wh=hDB._escStr(wh))))
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -619,26 +630,29 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    logger.setLevel(logging.INFO)
     # logger.setLevel(logging.DEBUG)
 
-    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
-    # TEST: hUserDB
+    # # TEST: hUserDB
     # logger.setLevel(logging.INFO)
+    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
     # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
     # test_hUserDB(hUserDB, userInfo)
-    # showall_test(hUserDB, """' or 1=1 --'""")
-    # showall_test1(hUserDB, """' or 1=1--'""")
 
-    # hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
     # TEST : hMusicDB
-    # logger.setLevel(logging.INFO)
-    # musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
-    #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
-    # test_hMusicDB(hMusicDB, musicInfo)
+    logger.setLevel(logging.INFO)
+    hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
+    musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
+                 'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
+    test_hMusicDB(hMusicDB, musicInfo)
 
-    hFile = HandleFile()
-    print(hFile.mkFileList(["imsi"]))
+    # hFile = HandleFile()
+    # print(hFile.mkFileList(["imsi"]))
+
+    # # sql injection test
+    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    # showall_test(hUserDB, """' or 1=1 --'""")
+    # # showall_test1(hUserDB, """' or 1=1--'""")
+    # showall_test2(hUserDB, """' or 1=1--'""")
 
     # tag = ID3("002.mp3")
     # print(tag['TIT2'].text[0])
