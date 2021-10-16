@@ -121,7 +121,7 @@ class HandleDB:
 
     def _where(self, dic):
         # make [ where key1='value1' and key2 = 'value2'; ]
-        # sql = """select * from {db}.{tb} where loginID = '{loginID}' and passwd= '{passwd}' and privilege {privilige}"""
+        # sql = """select * from {db}.{tb} where loginID = '{loginID}' and passwd= '{passwd}' and privilege={privilige}"""
         wh_Org = """ where """
         wh = wh_Org
         for key, value in dic.items():
@@ -210,7 +210,7 @@ class HandleUserDB(HandleDB):
                 sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                         idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
                         loginID  	varchar(32) NOT NULL,
-                        passwd 	    varchar(32) NOT NULL,
+                        passwd 	    varchar(64) NOT NULL,
                         privilege	boolean     DEFAULT false,
                         deleteflag	boolean     DEFAULT false,
                         PRIMARY KEY (idUser)
@@ -485,13 +485,9 @@ class HandleFile():
             raise
 
     def mkFileList(self, fileList):
-        if not type(fileList) is list:
-            fList = []
-            fList.append(fileList)
-
         try:
             result = []
-            for ff in fList:
+            for ff in fileList if type(fileList) is list else [fileList]:
                 if(os.path.isdir(ff)):
                     logger.info(
                         "%s is directory. Walk into the directory " % ff)
@@ -515,6 +511,16 @@ class HandleFile():
 def showall(hDB):
     print(hDB._sendQuery(
         "select * from {db}.{tb}".format(db=hDB.dbName, tb=hDB.tbName)))
+
+
+def showall_test(hDB, wh):
+    print(hDB._sendQuery(
+        "select * from {db}.{tb} where loginID = '{wh}';".format(db=hDB.dbName, tb=hDB.tbName, wh=wh)))
+
+
+def showall_test1(hDB, wh):
+    print(hDB._sendQuery("select * from %(db)s.%(tb)s where loginID = %(id)s",
+          data={'db': hDB.dbName, 'tb': hDB.tbName, 'id': wh}))
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -613,13 +619,16 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
+    # logger.setLevel(logging.DEBUG)
 
     # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
     # TEST: hUserDB
     # logger.setLevel(logging.INFO)
     # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
     # test_hUserDB(hUserDB, userInfo)
+    # showall_test(hUserDB, """' or 1=1 --'""")
+    # showall_test1(hUserDB, """' or 1=1--'""")
 
     # hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
     # TEST : hMusicDB
@@ -628,8 +637,8 @@ if __name__ == "__main__":
     #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
     # test_hMusicDB(hMusicDB, musicInfo)
 
-    # hFile = HandleFile()
-    # print(hFile.mkFileList("/Users/taehyunghwang/pyWorks/mMusic/imsi"))
+    hFile = HandleFile()
+    print(hFile.mkFileList(["imsi"]))
 
     # tag = ID3("002.mp3")
     # print(tag['TIT2'].text[0])

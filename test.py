@@ -105,15 +105,6 @@ def isAdmin(dbCon, dbName, userTB):
             trial += 1
 
 
-def makeUserDir(strDir):
-    if not os.access(strDir, os.F_OK):
-        try:
-            return os.makedirs(strDir, 0o775)
-        except:
-            logger.error("Error in makeUserDir().")
-            return False
-
-
 def removeUser(dbCon, dbName, userTB, homeDir, userInfo):
     logger.debug(
         "Deleting user account [%s] from the user table [%s] in the database [%s]", userInfo['uid'], userTB, dbName)
@@ -132,15 +123,6 @@ def removeUser(dbCon, dbName, userTB, homeDir, userInfo):
         logger.error(
             "%s cannot be deleted because it doesnot exists in the user table [%s] in the database [%s] ", userInfo['uid'], userTB, dbName)
         return False
-
-
-def deleteUserDir(strDir):
-    if os.access(strDir, os.F_OK):
-        try:
-            return shutil.rmtree(strDir)
-        except:
-            logger.error("Error in deleteUserDir().")
-            raise
 
 # Handling Music Files
 
@@ -173,34 +155,6 @@ def insertMusicDB(dbCon, dbName, musicTB, dstDir, musicList):
 
             insertMusicRecord(dbCon, dbName, musicTB, tag)
             shutil.move(ff, dstDir)
-
-
-def makeMusicList(musicList):
-    result = []
-
-    for ff in musicList:
-        if(os.path.isdir(ff)):
-            logger.info("%s is directory. Walk into the directory " % ff)
-            if os.listdir(ff):
-                for (path, dirs, files) in os.walk(ff):
-                    for ff2 in files:
-                        fName = os.path.abspath(os.path.join(path, ff2))
-                        if (isMusic(fName)):
-                            result.append(fName)
-                        else:
-                            logger.info("[Skip] " + fName +
-                                        " is not music file. ..... [Skip]")
-            else:
-                logger.info("[Skip] " + ff + " is empty .......... [Skip]")
-
-        else:
-            if (isMusic(ff)):
-                result.append(os.path.abspath(ff))
-            else:
-                logger.info("[Skip] " + ff +
-                            " is not music file. ..... [Skip]")
-
-    return result
 
 
 def isMusic(fName):
