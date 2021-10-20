@@ -8,6 +8,8 @@
 
 import os
 import shutil
+from pathlib import Path
+from pathlib import PurePath
 
 import logging
 import logging.handlers
@@ -114,7 +116,7 @@ class HandleDB:
             return False
 
     def makeTB(self):
-        # design eto rewrite the methon in the child class
+        # design to rewrite the method in the child class
         pass
 
     def deleteTB(self, dbName, tbName):
@@ -464,71 +466,125 @@ class HandleMusicDB(HandleDB):
             return False
 
 
-class HandleFile():
+class HandleFile:
+    def __init__(self):
+        logger.debug("Initializing HandleFile Class")
+
+    def __del__(self):
+        logger.debug("Deleting HandleFile Class")
+
     def mkDir(self, strDir):
-        if not os.access(strDir, os.F_OK):
-            try:
-                return os.makedirs(strDir, mode=0o775)
-            except:
-                logger.error("Error in mkDir() [%s]", strDir)
-                raise
-        else:
-            logger.error("Error in rmDir(). [%s] is not accessible", strDir)
+        try:
+            Path(strDir).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.error("%s. Error in mkDir() [%s]", e, strDir)
             raise
 
     def rmDir(self, strDir):
-        if os.access(strDir, os.F_OK):
-            try:
-                return shutil.rmtree(strDir)
-            except:
-                logger.error("Error in rmDir() [%s]", strDir)
-                raise
-        else:
-            logger.error("Error in rmDir(). [%s] is not accessible", strDir)
+        try:
+            shutil.rmtree(strDir)
+        except Exception as e:
+            logger.error("%s. Error in rmDir() [%s]", e, strDir)
             raise
 
     def mkFileList(self, fileList):
+        def walk(path):
+            for p in Path(path).iterdir():
+                if p.is_dir():
+                    yield from walk(p)
+                    continue
+                yield p.resolve()
+
+        result = []
+        for ff in fileList if type(fileList) is list else [fileList]:
+            hPath = Path(ff)
+            if(hPath.is_dir()):
+                logger.info("%s is directory. Walk into the directory " % ff)
+                [result.append(str(x)) for x in walk(ff)]
+            else:
+                result.append(str(hPath.resolve()))
+        return result
+
+
+class HandleTag:
+    def __init__(self):
+        logger.debug("Initializing HandleTag Class")
+        self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
+                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'USLT', 'lyricname': 'APIC'}
+
+    def __del__(self):
+        logger.debug("Deleting HandleTag Class")
+
+    def getTag(self, fName):
+        # All strings are unicode in python3. we don't need to decode string anymore.
+        logger.debug("Gathering ID3 Tag of [%s]", fName)
+        result = {}
         try:
-            result = []
-            for ff in fileList if type(fileList) is list else [fileList]:
-                if(os.path.isdir(ff)):
-                    logger.info(
-                        "%s is directory. Walk into the directory " % ff)
-                    if os.listdir(ff):
-                        for (path, dirs, files) in os.walk(ff):
-                            for ff2 in files:
-                                fName = os.path.abspath(
-                                    os.path.join(path, ff2))
-                                result.append(fName)
-                    else:
-                        logger.info("[Skip] " + ff +
-                                    " is empty .......... [Skip]")
-                else:
-                    result.append(os.path.abspath(ff))
+            # music 파일이 아니면 로딩시에 에러 발생. file doesn't start with an ID3 tag.
+            # 에러 발생시 return None 하므로 return 값 확인에서 None이 아니면 tagResults에 넣음.
+            tagList = ID3(fName).items()
+
+            for col, frame in self.id3Frames.items():
+                for key, value in tagList:
+                    if frame in key:
+                        result[col] = self._tagParsing(key, value)
+                        tagList.remove((key, value))
+                        break
             return result
-        except:
-            logger.error("Error in mkFileList() input = %s", fileList)
-            raise
 
+        except Exception as e:
+            # If file has no id3 head, ruturn None
+            logger.debug(
+                "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
+            return None
 
-def showall(hDB):
-    print(hDB._sendQuery(
-        "select * from {db}.{tb}".format(db=hDB.dbName, tb=hDB.tbName)))
+    def _tagParsing(self, key, value):
+        if key == 'TIT2':
+            return value.text[0]
+        else:
+            return key
 
+# {'TIT2': TIT2(encoding=<Encoding.UTF16: 1>, text=['Stay']),
+# 'TPE1': TPE1(encoding=<Encoding.UTF16: 1>, text=['The Kid LAROI & Justin Bieber']),
+# 'TRCK': TRCK(encoding=<Encoding.LATIN1: 0>, text=['001/100']),
+# 'TALB': TALB(encoding=<Encoding.UTF16: 1>, text=['Stay']),
+# 'TPOS': TPOS(encoding=<Encoding.LATIN1: 0>, text=['1']),
+# 'TDRC': TDRC(encoding=<Encoding.LATIN1: 0>, text=['2021']),
+# 'TCON': TCON(encoding=<Encoding.UTF16: 1>, text=['Pop']),
+# 'COMM::eng': COMM(encoding=<Encoding.UTF16: 1>, lang='eng', desc='', text=['Stay']),
+# 'COMM:ID3v1 Comment:eng': COMM(encoding=<Encoding.LATIN1: 0>, lang='eng', desc='ID3v1 Comment', text=['Stay']),
+# 'TCOP': TCOP(encoding=<Encoding.UTF16: 1>, text=['해당곡의 저작권자']),
+# 'WXXX:': WXXX(encoding=<Encoding.UTF16: 1>, desc='', url='http://www.genie.co.kr'),
+# 'TENC': TENC(encoding=<Encoding.UTF16: 1>, text=['GENIE MUSIC CORP.']),
+# 'TPE2': TPE2(encoding=<Encoding.UTF16: 1>, text=['The Kid LAROI & Justin Bieber'])}
 
-def showall_test(hDB, wh):
-    print(hDB._sendQuery(
-        "select * from {db}.{tb} where loginID = '{wh}';".format(db=hDB.dbName, tb=hDB.tbName, wh=wh)))
+        # result = {}
+        # result['title'] = parsingSong(tag, 'TIT2')
+        # result['artist'] = parsingSong(tag, 'TPE1')
+        # result['album'] = parsingSong(tag, 'TALB')
+        # result['sdate'] = parsingSong(tag, 'TDRC')
+        # result['genre'] = parsingSong(tag, 'TCON')
+        # # result['lyric'] 	= parsingSong(tag,'USLT::kor')
+        # # result['coverimg'] 	= parsingSong(tag,'APIC:')
+        # result['filename'] = os.path.basename(
+        #     fName).decode(sys.stdin.encoding).encode('utf8')
+        # result['currentrank'] = 9999
+        # result['favor'] = 0
+        # result['deleteflag'] = False
 
+        # return result
 
-def showall_test1(hDB, wh):
-    print(hDB._sendQuery("select * from %(db)s.%(tb)s where loginID = %(id)s",
-          data={'db': hDB.dbName, 'tb': hDB.tbName, 'id': wh}))
-
-
-def showall_test2(hDB, wh):
-    print(hDB._sendQuery(
-        "select * from {db}.{tb} where loginID = '{wh}';".format(db=hDB.dbName, tb=hDB.tbName, wh=hDB._escStr(wh))))
+        # title		varchar(256),
+        # artist 		varchar(256),
+        # album 		varchar(256),
+        # sdate 		date,
+        # genre 		varchar(32),
+        # filename 	varchar(256),
+        # imgname 	varchar(256),
+        # lyricname 	varchar(256),
+        # currentrank	int		unsigned,
+        # favor		int		unsigned,
+        # deleteflag	int		unsigned,
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -627,13 +683,13 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    # logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
 
-    # TEST: hUserDB
-    logger.setLevel(logging.INFO)
-    hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
-    userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
-    test_hUserDB(hUserDB, userInfo)
+    # # TEST: hUserDB
+    # logger.setLevel(logging.INFO)
+    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
+    # test_hUserDB(hUserDB, userInfo)
 
     # # TEST : hMusicDB
     # logger.setLevel(logging.INFO)
@@ -642,16 +698,20 @@ if __name__ == "__main__":
     #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
     # test_hMusicDB(hMusicDB, musicInfo)
 
-    # hFile = HandleFile()
-    # print(hFile.mkFileList(["imsi"]))
+    hFile = HandleFile()
+    hTag = HandleTag()
+
+    fList = hFile.mkFileList(["imsi2"])
+
+    i = 0
+    for ff in fList:
+        i = i + 1
+        print(i, end=" : ")
+        print(PurePath(ff).name, end=" : ")
+        print(hTag.getTag(ff))
 
     # # sql injection test
     # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
     # showall_test(hUserDB, """' or 1=1 --'""")
     # # showall_test1(hUserDB, """' or 1=1--'""")
     # showall_test2(hUserDB, """' or 1=1--'""")
-
-    # tag = ID3("002.mp3")
-    # print(tag['TIT2'].text[0])
-    # hMusicDB.addMusicRecord(
-    #     {'title': tag['TIT2'].text[0], 'artist': tag['TPE1'].text[0]})
