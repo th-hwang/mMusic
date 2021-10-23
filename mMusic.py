@@ -8,8 +8,7 @@
 
 import os
 import shutil
-from pathlib import Path
-from pathlib import PurePath
+import pathlib
 
 import logging
 import logging.handlers
@@ -475,7 +474,7 @@ class HandleFile:
 
     def mkDir(self, strDir):
         try:
-            Path(strDir).mkdir(parents=True, exist_ok=True)
+            pathlib.Path(strDir).mkdir(parents=True, exist_ok=True)
         except Exception as e:
             logger.error("%s. Error in mkDir() [%s]", e, strDir)
             raise
@@ -489,7 +488,7 @@ class HandleFile:
 
     def mkFileList(self, fileList):
         def walk(path):
-            for p in Path(path).iterdir():
+            for p in pathlib.Path(path).iterdir():
                 if p.is_dir():
                     yield from walk(p)
                     continue
@@ -497,7 +496,7 @@ class HandleFile:
 
         result = []
         for ff in fileList if type(fileList) is list else [fileList]:
-            hPath = Path(ff)
+            hPath = pathlib.Path(ff)
             if(hPath.is_dir()):
                 logger.info("%s is directory. Walk into the directory " % ff)
                 [result.append(str(x)) for x in walk(ff)]
@@ -505,12 +504,31 @@ class HandleFile:
                 result.append(str(hPath.resolve()))
         return result
 
+    def svFile(self, fName, data, binMode=True):
+        try:
+            if binMode:
+                pathlib.Path(fName).write_bytes(data)
+            else:
+                pathlib.Path(fName).write_text(data)
+        except Exception as e:
+            logger.error("%s. Error in svFile [%s]", e, fName)
+            raise
+
+    def mvFile(self, src, tgt):
+        try:
+            pathlib.Path(src).rename(tgt)
+        except Exception as e:
+            logger.error("%s. Error in mvFile [%s] to [%s] ", e, src, tgt)
+            raise
+
 
 class HandleTag:
     def __init__(self):
         logger.debug("Initializing HandleTag Class")
         self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
-                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'USLT', 'lyricname': 'APIC'}
+                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'APIC', 'lyricname': 'USLT'}
+        self._tmpImage = '_tmpImage'
+        self._tmpLyric = '_tmpLyric'
 
     def __del__(self):
         logger.debug("Deleting HandleTag Class")
@@ -527,9 +545,10 @@ class HandleTag:
             for col, frame in self.id3Frames.items():
                 for key, value in tagList:
                     if frame in key:
-                        result[col] = self._tagParsing(key, value)
+                        result[col] = self._tagParsing(frame, value)
                         tagList.remove((key, value))
                         break
+
             return result
 
         except Exception as e:
@@ -538,41 +557,11 @@ class HandleTag:
                 "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
             return None
 
-    def _tagParsing(self, key, value):
-        if key == 'TIT2':
-            return value.text[0]
-        else:
-            return key
+#     result['currentrank'] = 9999
+#     result['favor'] = 0
+#     result['deleteflag'] = False
 
-# {'TIT2': TIT2(encoding=<Encoding.UTF16: 1>, text=['Stay']),
-# 'TPE1': TPE1(encoding=<Encoding.UTF16: 1>, text=['The Kid LAROI & Justin Bieber']),
-# 'TRCK': TRCK(encoding=<Encoding.LATIN1: 0>, text=['001/100']),
-# 'TALB': TALB(encoding=<Encoding.UTF16: 1>, text=['Stay']),
-# 'TPOS': TPOS(encoding=<Encoding.LATIN1: 0>, text=['1']),
-# 'TDRC': TDRC(encoding=<Encoding.LATIN1: 0>, text=['2021']),
-# 'TCON': TCON(encoding=<Encoding.UTF16: 1>, text=['Pop']),
-# 'COMM::eng': COMM(encoding=<Encoding.UTF16: 1>, lang='eng', desc='', text=['Stay']),
-# 'COMM:ID3v1 Comment:eng': COMM(encoding=<Encoding.LATIN1: 0>, lang='eng', desc='ID3v1 Comment', text=['Stay']),
-# 'TCOP': TCOP(encoding=<Encoding.UTF16: 1>, text=['해당곡의 저작권자']),
-# 'WXXX:': WXXX(encoding=<Encoding.UTF16: 1>, desc='', url='http://www.genie.co.kr'),
-# 'TENC': TENC(encoding=<Encoding.UTF16: 1>, text=['GENIE MUSIC CORP.']),
-# 'TPE2': TPE2(encoding=<Encoding.UTF16: 1>, text=['The Kid LAROI & Justin Bieber'])}
-
-        # result = {}
-        # result['title'] = parsingSong(tag, 'TIT2')
-        # result['artist'] = parsingSong(tag, 'TPE1')
-        # result['album'] = parsingSong(tag, 'TALB')
-        # result['sdate'] = parsingSong(tag, 'TDRC')
-        # result['genre'] = parsingSong(tag, 'TCON')
-        # # result['lyric'] 	= parsingSong(tag,'USLT::kor')
-        # # result['coverimg'] 	= parsingSong(tag,'APIC:')
-        # result['filename'] = os.path.basename(
-        #     fName).decode(sys.stdin.encoding).encode('utf8')
-        # result['currentrank'] = 9999
-        # result['favor'] = 0
-        # result['deleteflag'] = False
-
-        # return result
+#     return result
 
         # title		varchar(256),
         # artist 		varchar(256),
@@ -585,6 +574,19 @@ class HandleTag:
         # currentrank	int		unsigned,
         # favor		int		unsigned,
         # deleteflag	int		unsigned,
+
+    def _tagParsing(self, key, value):
+        if key == 'APIC':
+            # save album image and return tmporary filename
+            HandleFile().svFile(self._tmpImage, value.data, binMode=True)
+            return self._tmpImage
+        elif key == 'USLT':
+            # save lyric and return tmporary filename
+            HandleFile().svFile(self._tmpLyric, value.text, binMode=False)
+            return self._tmpLyric
+        else:
+            # tilte TIT2, artist TPE1, album TALB, genre TCON
+            return value.text[0]
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -683,7 +685,7 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    logger.setLevel(logging.DEBUG)
+    # logger.setLevel(logging.DEBUG)
 
     # # TEST: hUserDB
     # logger.setLevel(logging.INFO)
@@ -701,14 +703,16 @@ if __name__ == "__main__":
     hFile = HandleFile()
     hTag = HandleTag()
 
-    fList = hFile.mkFileList(["imsi2"])
+    fList = hFile.mkFileList("imsi2")
 
     i = 0
     for ff in fList:
         i = i + 1
         print(i, end=" : ")
-        print(PurePath(ff).name, end=" : ")
+        print(pathlib.PurePath(ff).name, end=" : ")
         print(hTag.getTag(ff))
+
+    hFile.mvFile('_tmpImage', 'Img_' + pathlib.PurePath(ff).stem+".jpg")
 
     # # sql injection test
     # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
