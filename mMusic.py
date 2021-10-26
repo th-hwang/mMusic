@@ -18,20 +18,36 @@ from mutagen.id3 import ID3
 
 class HandleDB:
 
-    def __init__(self, dbHost, dbUser, dbPasswd):
-        logger.debug("Initializing HandleDB Class")
-        logger.debug("Connecting to the database sever")
-        try:
-            self.dbCon = MySQLdb.connect(
-                host=dbHost, user=dbUser, passwd=dbPasswd, charset='utf8')
-            logger.debug("Success to connect to the database sever")
-        except:
-            logger.error("Fail to connect to the database sever")
-            raise
+    def __init__(self, dbInfo={}):
+        logger.debug("Initializing HandleDB Class with dbInfo [%s]", dbInfo)
+        super(HandleDB, self).__init__()
+        self.connectDB(dbInfo)
 
     def __del__(self):
         logger.debug("Deleting HandleDB Class")
-        self.dbCon.close()
+        self.closeDB()
+
+    def connectDB(self, dbInfo):
+        if len(dbInfo) >= 3:
+            logger.debug("Connecting to the database sever")
+            try:
+                self.dbCon = MySQLdb.connect(
+                    host=dbInfo['dbHost'], user=dbInfo['dbUser'], passwd=dbInfo['dbPasswd'], charset='utf8')
+                logger.debug("Success to connect to the database sever")
+            except Exception as e:
+                logger.error(
+                    "Fail to connect to the database sever. Error message : %s.", e)
+                raise
+        else:
+            logger.debug(
+                "Insufficient dbInfo [%s]. Fill dbInfo and use connectDB()", dbInfo)
+
+    def closeDB(self):
+
+        if 'dbCon' in dir(self):
+            logger.debug("Closing DB Connection ")
+            self.dbCon.close()
+            del(self.dbCon)
 
     def _sendQuery(self, SQL, data={}, mode=""):
         logger.debug(
@@ -73,6 +89,14 @@ class HandleDB:
         sql = """Show databases like '{db}';""".format(db=self._escStr(dbName))
 
         return len(self._sendQuery(sql)) > 0
+
+    def setDB(self, dbName):
+        if not dbName == '':
+            self.dbName = self._escStr(dbName)
+            self.makeDB(self.dbName)
+        else:
+            logger.debug(
+                "[setDB] dbName is not defined. Define dbName and use setDB()")
 
     def makeDB(self, dbName):
         if(not self.isExistDB(dbName)):
@@ -185,48 +209,49 @@ class HandleDB:
 
 class HandleUserDB(HandleDB):
 
-    def __init__(self, dbHost, dbUser, dbPasswd, dbName, tbName):
+    def __init__(self, dbInfo={}, dbName='', tbName=''):
         logger.debug("Initializing HandleUserDB Class")
-        super().__init__(dbHost, dbUser, dbPasswd)
+        super(HandleUserDB, self).__init__(dbInfo)
 
-        self.dbName = self._escStr(dbName)
-        self.tbName = self._escStr(tbName)
-
-        if(not self.isExistDB(self.dbName)):
-            self.makeDB(self.dbName)
-
-        if(not self.isExistTB(self.dbName, self.tbName)):
-            self.makeTB()
+        self.setDB(dbName)
+        self.setTable(tbName)
 
     def __del__(self):
         logger.debug("Deleting HandleUserDB Class")
-        super().__del__()
+        super(HandleUserDB, self).__del__()
 
-    def makeTB(self):
-        if (self.isExistDB(self.dbName)):
-            if(not self.isExistTB(self.dbName, self.tbName)):
-                logger.debug(
-                    "Cannot find the user table [%s] in the database [%s]", self.tbName, self.dbName)
-                logger.debug(
-                    "Creating the user table [%s] in the database [%s]", self.tbName, self.dbName)
-
-                sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
-                        idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
-                        loginID  	varchar(32) NOT NULL,
-                        passwd 	    varchar(64) NOT NULL,
-                        privilege	boolean     DEFAULT false,
-                        deleteflag	boolean     DEFAULT false,
-                        PRIMARY KEY (idUser)
-                        ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
-
-                return self._sendQuery(sql) != None
+    def setTable(self, tbName):
+        if 'dbName' in dir(self):
+            if not tbName == '':
+                self.tbName = self._escStr(tbName)
+                self.makeTB()
             else:
                 logger.debug(
-                    "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
-                return False
+                    "[setTable] tbName is not defined. Define tbName first and use setTable()")
         else:
             logger.debug(
-                "There is no database [%s]", self.dbName)
+                "[setTable] dbName is not defined. Define dbName first and use setDB()")
+
+    def makeTB(self):
+        if(not self.isExistTB(self.dbName, self.tbName)):
+            logger.debug(
+                "Cannot find the user table [%s] in the database [%s]", self.tbName, self.dbName)
+            logger.debug(
+                "Creating the user table [%s] in the database [%s]", self.tbName, self.dbName)
+
+            sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
+                    idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
+                    loginID  	varchar(32) NOT NULL,
+                    passwd 	    varchar(64) NOT NULL,
+                    privilege	boolean     DEFAULT false,
+                    deleteflag	boolean     DEFAULT false,
+                    PRIMARY KEY (idUser)
+                    ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
+
+            return self._sendQuery(sql) != None
+        else:
+            logger.debug(
+                "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
             return False
 
     def isExistUser(self, userInfo):
@@ -327,55 +352,56 @@ class HandleUserDB(HandleDB):
 
 class HandleMusicDB(HandleDB):
 
-    def __init__(self, dbHost, dbUser, dbPasswd, dbName, tbName):
+    def __init__(self, dbInfo={}, dbName='', tbName=''):
         logger.debug("Initializing HandleMusicDB Class")
-        super().__init__(dbHost, dbUser, dbPasswd)
+        super(HandleMusicDB, self).__init__(dbInfo)
 
-        self.dbName = self._escStr(dbName)
-        self.tbName = self._escStr(tbName)
-
-        if(not self.isExistDB(self.dbName)):
-            self.makeDB(self.dbName)
-
-        if(not self.isExistTB(self.dbName, self.tbName)):
-            self.makeTB()
+        self.setDB(dbName)
+        self.setTable(tbName)
 
     def __del__(self):
         logger.debug("Deleting HandleMusicDB Class")
-        super().__del__()
+        super(HandleMusicDB, self).__del__()
 
-    def makeTB(self):
-        if (self.isExistDB(self.dbName)):
-            if(not self.isExistTB(self.dbName, self.tbName)):
-                logger.debug(
-                    "Cannot find the music table [%s] in the database [%s]", self.tbName, self.dbName)
-                logger.debug(
-                    "Creating the music table [%s] in the database [%s]", self.tbName, self.dbName)
-
-                sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
-                        idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
-                        title		varchar(256),
-                        artist 		varchar(256),
-                        album 		varchar(256),
-                        sdate 		date,
-                        genre 		varchar(32),
-                        filename 	varchar(256),
-                        imgname 	varchar(256),
-                        lyricname 	varchar(256),
-                        currentrank	int		unsigned,
-                        favor		int		unsigned,
-                        deleteflag	int		unsigned,
-                        PRIMARY KEY (idmusic)
-                        ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
-
-                return self._sendQuery(sql) != None
+    def setTable(self, tbName):
+        if 'dbName' in dir(self):
+            if not tbName == '':
+                self.tbName = self._escStr(tbName)
+                self.makeTB()
             else:
                 logger.debug(
-                    "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
-                return False
+                    "[setTable] tbName is not defined. Define tbName first and use setTable()")
         else:
             logger.debug(
-                "There is no database [%s]", self.dbName)
+                "[setTable] dbName is not defined. Define dbName first and use setDB()")
+
+    def makeTB(self):
+        if(not self.isExistTB(self.dbName, self.tbName)):
+            logger.debug(
+                "Cannot find the music table [%s] in the database [%s]", self.tbName, self.dbName)
+            logger.debug(
+                "Creating the music table [%s] in the database [%s]", self.tbName, self.dbName)
+
+            sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
+                    idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
+                    title		varchar(256),
+                    artist 		varchar(256),
+                    album 		varchar(256),
+                    sdate 		date,
+                    genre 		varchar(32),
+                    filename 	varchar(256),
+                    imgname 	varchar(256),
+                    lyricname 	varchar(256),
+                    currentrank	int		unsigned,
+                    favor		int		unsigned,
+                    deleteflag	int		unsigned,
+                    PRIMARY KEY (idmusic)
+                    ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
+
+            return self._sendQuery(sql) != None
+        else:
+            logger.debug(
+                "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
             return False
 
     def isExistMusic(self, musicInfo):
@@ -465,9 +491,61 @@ class HandleMusicDB(HandleDB):
             return False
 
 
+class HandleMusicTag:
+
+    def __init__(self):
+        logger.debug("Initializing HandleMusicTag Class")
+        super(HandleMusicTag, self).__init__()
+        self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
+                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'APIC', 'lyricname': 'USLT'}
+        self._tmpImage = '_tmpImage'
+        self._tmpLyric = '_tmpLyric'
+
+    def __del__(self):
+        logger.debug("Deleting HandleMusicTag Class")
+
+    def getTag(self, fName):
+        # All strings are unicode in python3. we don't need to decode string anymore.
+        logger.debug("Gathering ID3 Tag of [%s]", fName)
+        result = {}
+        try:
+            # music 파일이 아니면 로딩시에 에러 발생. file doesn't start with an ID3 tag.
+            # 에러 발생시 return None 하므로 return 값 확인에서 None이 아니면 tagResults에 넣음.
+            tagList = ID3(fName).items()
+
+            for col, frame in self.id3Frames.items():
+                for key, value in tagList:
+                    if frame in key:
+                        result[col] = self._tagParsing(frame, value)
+                        tagList.remove((key, value))
+                        break
+
+            return result
+
+        except Exception as e:
+            # If file has no id3 head, ruturn None
+            logger.debug(
+                "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
+            return None
+
+    def _tagParsing(self, key, value):
+        if key == 'APIC':
+            # save album image and return tmporary filename
+            HandleFile().svFile(self._tmpImage, value.data, binMode=True)
+            return self._tmpImage
+        elif key == 'USLT':
+            # save lyric and return tmporary filename
+            HandleFile().svFile(self._tmpLyric, value.text, binMode=False)
+            return self._tmpLyric
+        else:
+            # tilte TIT2, artist TPE1, album TALB, genre TCON
+            return value.text[0]
+
+
 class HandleFile:
     def __init__(self):
         logger.debug("Initializing HandleFile Class")
+        super(HandleFile, self).__init__()
 
     def __del__(self):
         logger.debug("Deleting HandleFile Class")
@@ -522,71 +600,39 @@ class HandleFile:
             raise
 
 
-class HandleTag:
-    def __init__(self):
-        logger.debug("Initializing HandleTag Class")
-        self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
-                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'APIC', 'lyricname': 'USLT'}
-        self._tmpImage = '_tmpImage'
-        self._tmpLyric = '_tmpLyric'
+class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
+
+    # userID를 인수로 받아서 그 이름의 music table을 만들고
+    # 파일/디렉토리를 인수로 받아서 music tag를 얻어서
+    # music tabel에 입력하고 target directory 로 옮김
+
+    def __init__(self, dbInfo={}, dbName='', tbName=''):
+        logger.debug(
+            "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
+        super(HandleMusic, self).__init__(dbInfo, dbName, tbName)
+        pass
 
     def __del__(self):
-        logger.debug("Deleting HandleTag Class")
+        logger.debug("Deleting HandleMusic Class")
+        super(HandleMusic, self).__del__()
 
-    def getTag(self, fName):
-        # All strings are unicode in python3. we don't need to decode string anymore.
-        logger.debug("Gathering ID3 Tag of [%s]", fName)
-        result = {}
-        try:
-            # music 파일이 아니면 로딩시에 에러 발생. file doesn't start with an ID3 tag.
-            # 에러 발생시 return None 하므로 return 값 확인에서 None이 아니면 tagResults에 넣음.
-            tagList = ID3(fName).items()
+    #     result['currentrank'] = 9999
+    #     result['favor'] = 0
+    #     result['deleteflag'] = False
 
-            for col, frame in self.id3Frames.items():
-                for key, value in tagList:
-                    if frame in key:
-                        result[col] = self._tagParsing(frame, value)
-                        tagList.remove((key, value))
-                        break
+    #     return result
 
-            return result
-
-        except Exception as e:
-            # If file has no id3 head, ruturn None
-            logger.debug(
-                "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
-            return None
-
-#     result['currentrank'] = 9999
-#     result['favor'] = 0
-#     result['deleteflag'] = False
-
-#     return result
-
-        # title		varchar(256),
-        # artist 		varchar(256),
-        # album 		varchar(256),
-        # sdate 		date,
-        # genre 		varchar(32),
-        # filename 	varchar(256),
-        # imgname 	varchar(256),
-        # lyricname 	varchar(256),
-        # currentrank	int		unsigned,
-        # favor		int		unsigned,
-        # deleteflag	int		unsigned,
-
-    def _tagParsing(self, key, value):
-        if key == 'APIC':
-            # save album image and return tmporary filename
-            HandleFile().svFile(self._tmpImage, value.data, binMode=True)
-            return self._tmpImage
-        elif key == 'USLT':
-            # save lyric and return tmporary filename
-            HandleFile().svFile(self._tmpLyric, value.text, binMode=False)
-            return self._tmpLyric
-        else:
-            # tilte TIT2, artist TPE1, album TALB, genre TCON
-            return value.text[0]
+    # title		varchar(256),
+    # artist 		varchar(256),
+    # album 		varchar(256),
+    # sdate 		date,
+    # genre 		varchar(32),
+    # filename 	varchar(256),
+    # imgname 	varchar(256),
+    # lyricname 	varchar(256),
+    # currentrank	int		unsigned,
+    # favor		int		unsigned,
+    # deleteflag	int		unsigned,
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -667,6 +713,40 @@ def test_hMusicDB(hMusicDB, musicInfo):
         musicInfo['artist'], musicInfo['title']))
 
 
+def test_hMusic(hd, dbInfo, dbName, tbName):
+    print('connectDB -------------- ')
+    hd.connectDB(dbInfo)
+    print('setDB -------------- ')
+    hd.setDB(dbName)
+    print('set Table -------------- ')
+    hd.setTable(tbName)
+    print('print internal variable -------------- ')
+    print(hd.id3Frames)
+    hd.closeDB()
+
+
+def test_class():
+    print('HandleDB')
+    hMusic = HandleDB()
+    del(hMusic)
+    print('HandleMusicDB')
+    hMusic = HandleMusicDB()
+    del(hMusic)
+    print('HandleMusicTag')
+    hMusic = HandleMusicTag()
+    del(hMusic)
+    print('HandleUserDB')
+    hMusic = HandleUserDB()
+    del(hMusic)
+    print('HandleFile')
+    hMusic = HandleFile()
+    del(hMusic)
+    print('HandleMusic')
+    hMusic = HandleMusic()
+    print(hMusic.id3Frames)
+    del(hMusic)
+
+
 if __name__ == "__main__":
 
     # setting define directory
@@ -685,37 +765,46 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    # logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+
+    dbInfo = {'dbHost': DB_HOST, 'dbUser': DB_USER, 'dbPasswd': DB_PASSWD}
 
     # # TEST: hUserDB
     # logger.setLevel(logging.INFO)
-    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
+    # hUserDB = HandleUserDB(dbInfo, DB_NAME, USER_TB_NAME)
     # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
     # test_hUserDB(hUserDB, userInfo)
 
     # # TEST : hMusicDB
     # logger.setLevel(logging.INFO)
-    # hMusicDB = HandleMusicDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, TEMP_UID)
+    # hMusicDB = HandleMusicDB(dbInfo, DB_NAME, TEMP_UID)
     # musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
     #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
     # test_hMusicDB(hMusicDB, musicInfo)
 
-    hFile = HandleFile()
-    hTag = HandleTag()
+    # # TEST : HandleMusic
+    # test_hMusic(HandleMusic(), dbInfo, DB_NAME, TEMP_UID)
 
-    fList = hFile.mkFileList("imsi2")
+    # TEST : make class
+    test_class()
 
-    i = 0
-    for ff in fList:
-        i = i + 1
-        print(i, end=" : ")
-        print(pathlib.PurePath(ff).name, end=" : ")
-        print(hTag.getTag(ff))
+    # hFile = HandleFile()
+    # hTag = HandleTag()
 
-    hFile.mvFile('_tmpImage', 'Img_' + pathlib.PurePath(ff).stem+".jpg")
+    # fList = hFile.mkFileList("imsi2")
 
-    # # sql injection test
-    # hUserDB = HandleUserDB(DB_HOST, DB_USER, DB_PASSWD, DB_NAME, USER_TB_NAME)
-    # showall_test(hUserDB, """' or 1=1 --'""")
-    # # showall_test1(hUserDB, """' or 1=1--'""")
-    # showall_test2(hUserDB, """' or 1=1--'""")
+    # i = 0
+    # for ff in fList:
+    #     i = i + 1
+    #     print(i, end=" : ")
+    #     print(pathlib.PurePath(ff).name, end=" : ")
+    #     print(hTag.getTag(ff))
+
+    # hFile.mvFile('_tmpImage', 'Img_' + pathlib.PurePath(ff).stem+".jpg")
+
+    # hMusic = HandleMusic()
+
+    # print(HandleMusic.mro())
+
+    # print(hMusic.mkFileList('imsi2'))
+    # print(hMusic.id3Frames)
