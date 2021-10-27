@@ -6,7 +6,6 @@
 # ver 0.4 : [bug fix] change handling escape characters
 # ver 0.5 : change to python3 and make class
 
-import os
 import shutil
 import pathlib
 
@@ -516,7 +515,7 @@ class HandleMusicTag:
             for col, frame in self.id3Frames.items():
                 for key, value in tagList:
                     if frame in key:
-                        result[col] = self._tagParsing(frame, value)
+                        result[col] = self._tagParsing(frame, value, fName)
                         tagList.remove((key, value))
                         break
 
@@ -528,15 +527,17 @@ class HandleMusicTag:
                 "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
             return None
 
-    def _tagParsing(self, key, value):
+    def _tagParsing(self, key, value, fName):
         if key == 'APIC':
             # save album image and return tmporary filename
-            HandleFile().svFile(self._tmpImage, value.data, binMode=True)
-            return self._tmpImage
+            imgPath = pathlib.PurePath(fName).parent.joinpath(self._tmpImage)
+            HandleFile().svFile(imgPath, value.data, binMode=True)
+            return imgPath
         elif key == 'USLT':
             # save lyric and return tmporary filename
-            HandleFile().svFile(self._tmpLyric, value.text, binMode=False)
-            return self._tmpLyric
+            lyrPath = pathlib.PurePath(fName).parent.joinpath(self._tmpLyric)
+            HandleFile().svFile(lyrPath, value.text, binMode=False)
+            return lyrPath
         else:
             # tilte TIT2, artist TPE1, album TALB, genre TCON
             return value.text[0]
@@ -616,23 +617,114 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         logger.debug("Deleting HandleMusic Class")
         super(HandleMusic, self).__del__()
 
-    #     result['currentrank'] = 9999
-    #     result['favor'] = 0
-    #     result['deleteflag'] = False
+    def mkMusicInfo(self, fileList):
+        # flist 입력으로 tag Info list를 작성함.
+        logger.debug("Making Muisc Info .. ")
 
-    #     return result
+        result = []
 
-    # title		varchar(256),
-    # artist 		varchar(256),
-    # album 		varchar(256),
-    # sdate 		date,
-    # genre 		varchar(32),
-    # filename 	varchar(256),
-    # imgname 	varchar(256),
-    # lyricname 	varchar(256),
-    # currentrank	int		unsigned,
-    # favor		int		unsigned,
-    # deleteflag	int		unsigned,
+        for ff in self.mkFileList(fileList):
+            tmpDic = self.getTag(ff)
+
+            if not tmpDic == None:
+                fParent = pathlib.PurePath(ff).parent
+                fName = pathlib.PurePath(ff).name
+                fStem = pathlib.PurePath(ff).stem
+
+                if not 'title' in tmpDic.keys():
+                    tmpDic['title'] = fStem
+
+                tmpDic['filename'] = fName
+
+                if 'imgname' in tmpDic.keys():
+                    imgname = fParent.joinpath('CoverImg_' + fStem + '.jpg')
+                    self.mvFile(tmpDic['imgname'], imgname)
+                    tmpDic['imgname'] = str(imgname)
+
+                if 'lyricname' in tmpDic.keys():
+                    lyricname = fParent.joinpath('Lyric_' + fStem + '.txt')
+                    self.mvFile(tmpDic['lyricname'], lyricname)
+                    tmpDic['lyricname'] = str(lyricname)
+
+                tmpDic['currentrank'] = 9999
+                tmpDic['favor'] = 0
+                tmpDic['deleteflag'] = False
+
+                result.append(tmpDic)
+
+        return result
+
+        # def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
+        #     logger.debug("Adding musics list ---")
+
+        #     updateMusicDB(dbCon, dbName, userInfo['uid'], [
+        #                   os.path.join(homeDir, userInfo['uid']), ])
+        #     insertMusicDB(dbCon, dbName, userInfo['uid'], os.path.join(
+        #         homeDir, userInfo['uid']), musicList)
+
+        #     return True
+
+        # def insertMusicDB(dbCon, dbName, musicTB, dstDir, musicList):
+        #     logger.info("inserting music information into database .....")
+
+        #     for ff in makeMusicList(musicList):
+        #         tagToUTF8(ff)
+        #         tag = getTag(ff)
+
+        #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
+        #             # ----
+        #             logger.info(
+        #                 "[Skip] {fn} already exists ................. [Skip]".format(fn=ff))
+        #         else:
+        #             logger.info(
+        #                 "[Move] {fn} is moving to {dr} ............... [Ok]".format(fn=ff, dr=dstDir))
+
+        #             insertMusicRecord(dbCon, dbName, musicTB, tag)
+        #             shutil.move(ff, dstDir)
+
+        # def updateMusicDB(dbCon, dbName, musicTB, musicDir):  # musicDir should be list
+        #     logger.info("Updating Database .....")
+        #     music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
+
+        #     setDeleteFlag(dbCon, dbName, musicTB)
+
+        #     for ff in makeMusicList(musicDir):
+        #         tag = getTag(ff)
+        #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
+        #             unsetDeleteFlag(dbCon, dbName, musicTB, tag)
+        #             increaseFavor(dbCon, dbName, musicTB, tag)
+
+        #     return deleteMusicRecord(dbCon, dbName, musicTB)
+
+        # def setDeleteFlag(dbCon, dbName, musicTB):
+        #     logger.debug("Setting delete-flag of all music to on")
+        #     sql = """update {db}.{tb} set deleteflag=True"""
+        #     sql = sql.format(db=dbName, tb=musicTB)
+
+        #     return sendQuery(dbCon, sql, mode="DML")
+
+        # def unsetDeleteFlag(dbCon, dbName, musicTB, tag):
+        #     logger.debug("Setting delete-flag of all music to off")
+        #     sql = """update {db}.{tb} set deleteflag=False where title = "{ti}" and artist="{ar}" """
+        #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
+        #         tag['title']), ar=simplify(tag['artist']))
+
+        #     return sendQuery(dbCon, sql, mode="DML")
+
+        # def increaseFavor(dbCon, dbName, musicTB, tag):
+        #     logger.debug("Increasing favorite number of music")
+        #     sql = """update {db}.{tb} set favor=favor+1 where title = "{ti}" and artist="{ar}" """
+        #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
+        #         tag['title']), ar=simplify(tag['artist']))
+
+        #     return sendQuery(dbCon, sql, mode="DML")
+
+        # def deleteMusicRecord(dbCon, dbName, musicTB):
+        #     logger.debug("Deleting music records having on delete-flag ")
+        #     sql = """delete from {db}.{tb} where deleteflag=True"""
+        #     sql = sql.format(db=dbName, tb=musicTB)
+
+        #     return sendQuery(dbCon, sql, mode="DML")
 
 
 def test_hUserDB(hUserDB, userInfo):
@@ -765,7 +857,7 @@ if __name__ == "__main__":
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
-    logger.setLevel(logging.DEBUG)
+    # logger.setLevel(logging.DEBUG)
 
     dbInfo = {'dbHost': DB_HOST, 'dbUser': DB_USER, 'dbPasswd': DB_PASSWD}
 
@@ -785,8 +877,8 @@ if __name__ == "__main__":
     # # TEST : HandleMusic
     # test_hMusic(HandleMusic(), dbInfo, DB_NAME, TEMP_UID)
 
-    # TEST : make class
-    test_class()
+    # # TEST : make class
+    # test_class()
 
     # hFile = HandleFile()
     # hTag = HandleTag()
@@ -801,10 +893,7 @@ if __name__ == "__main__":
     #     print(hTag.getTag(ff))
 
     # hFile.mvFile('_tmpImage', 'Img_' + pathlib.PurePath(ff).stem+".jpg")
+    logger.setLevel(logging.INFO)
 
-    # hMusic = HandleMusic()
-
-    # print(HandleMusic.mro())
-
-    # print(hMusic.mkFileList('imsi2'))
-    # print(hMusic.id3Frames)
+    hm = HandleMusic()
+    print(hm.mkMusicInfo('imsi2'))
