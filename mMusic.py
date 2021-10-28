@@ -8,11 +8,11 @@
 
 import shutil
 import pathlib
-
 import logging
 import logging.handlers
 import MySQLdb
 from mutagen.id3 import ID3
+import argparse
 
 
 class HandleDB:
@@ -497,8 +497,6 @@ class HandleMusicTag:
         super(HandleMusicTag, self).__init__()
         self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
                           'genre': 'TCON', 'filename': 'PATH', 'imgname': 'APIC', 'lyricname': 'USLT'}
-        self._tmpImage = '_tmpImage'
-        self._tmpLyric = '_tmpLyric'
 
     def __del__(self):
         logger.debug("Deleting HandleMusicTag Class")
@@ -528,16 +526,20 @@ class HandleMusicTag:
             return None
 
     def _tagParsing(self, key, value, fName):
+
+        fParent = pathlib.PurePath(fName).parent
+        fStem = pathlib.PurePath(fName).stem
+
         if key == 'APIC':
             # save album image and return tmporary filename
-            imgPath = pathlib.PurePath(fName).parent.joinpath(self._tmpImage)
+            imgPath = fParent.joinpath('CoverImg_' + fStem + '.jpg')
             HandleFile().svFile(imgPath, value.data, binMode=True)
-            return imgPath
+            return str(imgPath)
         elif key == 'USLT':
             # save lyric and return tmporary filename
-            lyrPath = pathlib.PurePath(fName).parent.joinpath(self._tmpLyric)
+            lyrPath = fParent.joinpath('Lyric_' + fStem + '.txt')
             HandleFile().svFile(lyrPath, value.text, binMode=False)
-            return lyrPath
+            return str(lyrPath)
         else:
             # tilte TIT2, artist TPE1, album TALB, genre TCON
             return value.text[0]
@@ -627,24 +629,11 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
             tmpDic = self.getTag(ff)
 
             if not tmpDic == None:
-                fParent = pathlib.PurePath(ff).parent
-                fName = pathlib.PurePath(ff).name
-                fStem = pathlib.PurePath(ff).stem
 
                 if not 'title' in tmpDic.keys():
-                    tmpDic['title'] = fStem
+                    tmpDic['title'] = pathlib.PurePath(ff).stem
 
-                tmpDic['filename'] = fName
-
-                if 'imgname' in tmpDic.keys():
-                    imgname = fParent.joinpath('CoverImg_' + fStem + '.jpg')
-                    self.mvFile(tmpDic['imgname'], imgname)
-                    tmpDic['imgname'] = str(imgname)
-
-                if 'lyricname' in tmpDic.keys():
-                    lyricname = fParent.joinpath('Lyric_' + fStem + '.txt')
-                    self.mvFile(tmpDic['lyricname'], lyricname)
-                    tmpDic['lyricname'] = str(lyricname)
+                tmpDic['filename'] = ff
 
                 tmpDic['currentrank'] = 9999
                 tmpDic['favor'] = 0
@@ -654,189 +643,77 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
 
         return result
 
-        # def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
-        #     logger.debug("Adding musics list ---")
+    # def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
+    #     logger.debug("Adding musics list ---")
 
-        #     updateMusicDB(dbCon, dbName, userInfo['uid'], [
-        #                   os.path.join(homeDir, userInfo['uid']), ])
-        #     insertMusicDB(dbCon, dbName, userInfo['uid'], os.path.join(
-        #         homeDir, userInfo['uid']), musicList)
+    #     updateMusicDB(dbCon, dbName, userInfo['uid'], [
+    #                   os.path.join(homeDir, userInfo['uid']), ])
+    #     insertMusicDB(dbCon, dbName, userInfo['uid'], os.path.join(
+    #         homeDir, userInfo['uid']), musicList)
 
-        #     return True
+    #     return True
 
-        # def insertMusicDB(dbCon, dbName, musicTB, dstDir, musicList):
-        #     logger.info("inserting music information into database .....")
+    # def insertMusicDB(dbCon, dbName, musicTB, dstDir, musicList):
+    #     logger.info("inserting music information into database .....")
 
-        #     for ff in makeMusicList(musicList):
-        #         tagToUTF8(ff)
-        #         tag = getTag(ff)
+    #     for ff in makeMusicList(musicList):
+    #         tagToUTF8(ff)
+    #         tag = getTag(ff)
 
-        #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
-        #             # ----
-        #             logger.info(
-        #                 "[Skip] {fn} already exists ................. [Skip]".format(fn=ff))
-        #         else:
-        #             logger.info(
-        #                 "[Move] {fn} is moving to {dr} ............... [Ok]".format(fn=ff, dr=dstDir))
+    #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
+    #             # ----
+    #             logger.info(
+    #                 "[Skip] {fn} already exists ................. [Skip]".format(fn=ff))
+    #         else:
+    #             logger.info(
+    #                 "[Move] {fn} is moving to {dr} ............... [Ok]".format(fn=ff, dr=dstDir))
 
-        #             insertMusicRecord(dbCon, dbName, musicTB, tag)
-        #             shutil.move(ff, dstDir)
+    #             insertMusicRecord(dbCon, dbName, musicTB, tag)
+    #             shutil.move(ff, dstDir)
 
-        # def updateMusicDB(dbCon, dbName, musicTB, musicDir):  # musicDir should be list
-        #     logger.info("Updating Database .....")
-        #     music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
+    # def updateMusicDB(dbCon, dbName, musicTB, musicDir):  # musicDir should be list
+    #     logger.info("Updating Database .....")
+    #     music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
 
-        #     setDeleteFlag(dbCon, dbName, musicTB)
+    #     setDeleteFlag(dbCon, dbName, musicTB)
 
-        #     for ff in makeMusicList(musicDir):
-        #         tag = getTag(ff)
-        #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
-        #             unsetDeleteFlag(dbCon, dbName, musicTB, tag)
-        #             increaseFavor(dbCon, dbName, musicTB, tag)
+    #     for ff in makeMusicList(musicDir):
+    #         tag = getTag(ff)
+    #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
+    #             unsetDeleteFlag(dbCon, dbName, musicTB, tag)
+    #             increaseFavor(dbCon, dbName, musicTB, tag)
 
-        #     return deleteMusicRecord(dbCon, dbName, musicTB)
+    #     return deleteMusicRecord(dbCon, dbName, musicTB)
 
-        # def setDeleteFlag(dbCon, dbName, musicTB):
-        #     logger.debug("Setting delete-flag of all music to on")
-        #     sql = """update {db}.{tb} set deleteflag=True"""
-        #     sql = sql.format(db=dbName, tb=musicTB)
+    # def setDeleteFlag(dbCon, dbName, musicTB):
+    #     logger.debug("Setting delete-flag of all music to on")
+    #     sql = """update {db}.{tb} set deleteflag=True"""
+    #     sql = sql.format(db=dbName, tb=musicTB)
 
-        #     return sendQuery(dbCon, sql, mode="DML")
+    #     return sendQuery(dbCon, sql, mode="DML")
 
-        # def unsetDeleteFlag(dbCon, dbName, musicTB, tag):
-        #     logger.debug("Setting delete-flag of all music to off")
-        #     sql = """update {db}.{tb} set deleteflag=False where title = "{ti}" and artist="{ar}" """
-        #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
-        #         tag['title']), ar=simplify(tag['artist']))
+    # def unsetDeleteFlag(dbCon, dbName, musicTB, tag):
+    #     logger.debug("Setting delete-flag of all music to off")
+    #     sql = """update {db}.{tb} set deleteflag=False where title = "{ti}" and artist="{ar}" """
+    #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
+    #         tag['title']), ar=simplify(tag['artist']))
 
-        #     return sendQuery(dbCon, sql, mode="DML")
+    #     return sendQuery(dbCon, sql, mode="DML")
 
-        # def increaseFavor(dbCon, dbName, musicTB, tag):
-        #     logger.debug("Increasing favorite number of music")
-        #     sql = """update {db}.{tb} set favor=favor+1 where title = "{ti}" and artist="{ar}" """
-        #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
-        #         tag['title']), ar=simplify(tag['artist']))
+    # def increaseFavor(dbCon, dbName, musicTB, tag):
+    #     logger.debug("Increasing favorite number of music")
+    #     sql = """update {db}.{tb} set favor=favor+1 where title = "{ti}" and artist="{ar}" """
+    #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
+    #         tag['title']), ar=simplify(tag['artist']))
 
-        #     return sendQuery(dbCon, sql, mode="DML")
+    #     return sendQuery(dbCon, sql, mode="DML")
 
-        # def deleteMusicRecord(dbCon, dbName, musicTB):
-        #     logger.debug("Deleting music records having on delete-flag ")
-        #     sql = """delete from {db}.{tb} where deleteflag=True"""
-        #     sql = sql.format(db=dbName, tb=musicTB)
+    # def deleteMusicRecord(dbCon, dbName, musicTB):
+    #     logger.debug("Deleting music records having on delete-flag ")
+    #     sql = """delete from {db}.{tb} where deleteflag=True"""
+    #     sql = sql.format(db=dbName, tb=musicTB)
 
-        #     return sendQuery(dbCon, sql, mode="DML")
-
-
-def test_hUserDB(hUserDB, userInfo):
-    print("Check Database : " +
-          "[OK]" if hUserDB.isExistDB(hUserDB.dbName) else "[ERROR]")
-
-    print("Check Table : " +
-          "[OK]" if hUserDB.isExistTB(hUserDB.dbName, hUserDB.tbName) else "[ERROR]")
-
-    print("Add UserAccount : ", end="")
-    print(userInfo)
-    hUserDB.addUserAccount(userInfo)
-    print("Get UserAccount : ", end="")
-    print(hUserDB.getUserAccount(userInfo['loginID']))
-
-    print("Add UserAccount when account exists: ", end="")
-    print(userInfo)
-    hUserDB.addUserAccount(userInfo)
-
-    print("Update UserAccount : ", end="")
-    userInfo['passwd'] = "change"
-    print(userInfo)
-    hUserDB.updateUserAccount(userInfo)
-    print("Get UserAccount : ", end="")
-    print(hUserDB.getUserAccount(userInfo['loginID']))
-
-    print("Remove UserAccount :", end="")
-    print(userInfo)
-    hUserDB.rmUserAccount(userInfo['loginID'])
-    print("Get UserAccount : ", end="")
-    print(hUserDB.getUserAccount(userInfo['loginID']))
-
-    print("Remove UserAccount when account doesn't exist :", end="")
-    print(userInfo)
-    hUserDB.rmUserAccount(userInfo['loginID'])
-    print("Get UserAccount : ", end="")
-    print(hUserDB.getUserAccount(userInfo['loginID']))
-
-
-def test_hMusicDB(hMusicDB, musicInfo):
-    print("Check Database : " +
-          "[OK]" if hMusicDB.isExistDB(hMusicDB.dbName) else "[ERROR]")
-
-    print("Check Table : " +
-          "[OK]" if hMusicDB.isExistTB(hMusicDB.dbName, hMusicDB.tbName) else "[ERROR]")
-
-    print("Add music info record :", end="")
-    print(musicInfo)
-    hMusicDB.addMusicRecord(musicInfo)
-    print("Get music info record :", end="")
-    print(hMusicDB.getMusicRecordArtistTitle(
-        musicInfo['artist'], musicInfo['title']))
-
-    print("Add music info record when the music record exists:", end="")
-    print(musicInfo)
-    hMusicDB.addMusicRecord(musicInfo)
-
-    print("Update music info record : ", end="")
-    musicInfo['genre'] = "change"
-    print(musicInfo)
-    hMusicDB.updateMusicRecord(musicInfo)
-    print("Get music Info record :", end="")
-    print(hMusicDB.getMusicRecordArtistTitle(
-        musicInfo['artist'], musicInfo['title']))
-
-    print("Remove music info record :", end="")
-    print(musicInfo)
-    hMusicDB.rmMusicRecordArtistTitle(musicInfo['artist'], musicInfo['title'])
-    print("Get music Info record :", end="")
-    print(hMusicDB.getMusicRecordArtistTitle(
-        musicInfo['artist'], musicInfo['title']))
-
-    print("Remove music info record when the music record doesn't exist :", end="")
-    print(musicInfo)
-    hMusicDB.rmMusicRecordArtistTitle(musicInfo['artist'], musicInfo['title'])
-    print("Get music Info record :", end="")
-    print(hMusicDB.getMusicRecordArtistTitle(
-        musicInfo['artist'], musicInfo['title']))
-
-
-def test_hMusic(hd, dbInfo, dbName, tbName):
-    print('connectDB -------------- ')
-    hd.connectDB(dbInfo)
-    print('setDB -------------- ')
-    hd.setDB(dbName)
-    print('set Table -------------- ')
-    hd.setTable(tbName)
-    print('print internal variable -------------- ')
-    print(hd.id3Frames)
-    hd.closeDB()
-
-
-def test_class():
-    print('HandleDB')
-    hMusic = HandleDB()
-    del(hMusic)
-    print('HandleMusicDB')
-    hMusic = HandleMusicDB()
-    del(hMusic)
-    print('HandleMusicTag')
-    hMusic = HandleMusicTag()
-    del(hMusic)
-    print('HandleUserDB')
-    hMusic = HandleUserDB()
-    del(hMusic)
-    print('HandleFile')
-    hMusic = HandleFile()
-    del(hMusic)
-    print('HandleMusic')
-    hMusic = HandleMusic()
-    print(hMusic.id3Frames)
-    del(hMusic)
+    #     return sendQuery(dbCon, sql, mode="DML")
 
 
 if __name__ == "__main__":
@@ -847,53 +724,97 @@ if __name__ == "__main__":
     DB_PASSWD = "kodi"
     DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
-    HOME_DIR = "/common/Musics/"
-    TEMP_UID = "karlken"
+    # HOME_DIR = "/common/Musics/"
+    HOME_DIR = "/Users/taehyunghwang/Music"
 
-    logger = logging.getLogger(DB_USER)
+    # parsing argument
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("-u", "--uID", required=True,
+                        metavar="userID", type=str, help="user id")
+    parser.add_argument("-s", "--musicsList", required=False,
+                        nargs="+",  help="music file or directory having them")
+    # parser.add_argument("-op", "--operation", required=False,
+    #                     choices={'add', 'rm'}, help="add or remove user account")
+    parser.add_argument("-l", "--log", required=False,
+                        action="store_true", help="make log file in account directory")
+    # parser.add_argument("-r", "--rank", required=False, action="store_true",
+    # #                     help="update music rank based on melop top 100 chart")
+    # parser.add_argument("-up", "--update", required=False, action="store_true",
+    #                     help="update database based on music in the directory")
+
+    args = parser.parse_args()
+
+    # setup logging
+    logger = logging.getLogger(args.uID)
     fomatter = logging.Formatter(
         '[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
+
+    if (args.log):
+        fPath = pathlib.PurePath(HOME_DIR).joinpath(args.uID)
+        HandleFile().mkDir(fPath)
+        fileHandler = logging.handlers.RotatingFileHandler(
+            fPath.joinpath(args.uID+".log"), maxBytes=1024*1024*10, backupCount=5)
+        fileHandler.setFormatter(fomatter)
+        logger.addHandler(fileHandler)
 
     streamHandler = logging.StreamHandler()
     streamHandler.setFormatter(fomatter)
     logger.addHandler(streamHandler)
+
+    logger.setLevel(logging.INFO)
     # logger.setLevel(logging.DEBUG)
 
-    dbInfo = {'dbHost': DB_HOST, 'dbUser': DB_USER, 'dbPasswd': DB_PASSWD}
+    logger.debug("Handling argument")
 
-    # # TEST: hUserDB
-    # logger.setLevel(logging.INFO)
-    # hUserDB = HandleUserDB(dbInfo, DB_NAME, USER_TB_NAME)
-    # userInfo = {'loginID': DB_USER, 'passwd': DB_PASSWD, 'privilege': True}
-    # test_hUserDB(hUserDB, userInfo)
+    # if(args.operation == "add"):
+    #     logger.debug("Add user ----")
+    #     try:
+    #         userInfo
+    #     except NameError:
+    #         userInfo = getUserAccount(
+    #             "Welcome Home_Music.\n{uid}\'s account will be created".format(uid=args.uID), args.uID)
+    #     addUser(dbCon, DB_NAME, USER_TB, HOME_DIR, userInfo)
 
-    # # TEST : hMusicDB
-    # logger.setLevel(logging.INFO)
-    # hMusicDB = HandleMusicDB(dbInfo, DB_NAME, TEMP_UID)
-    # musicInfo = {'title': '노래', 'artist': '아이유', 'album': '발라드', 'sdate': 20211011, 'genre': '발라드', 'filename': 'file_here',
-    #              'imgname': 'img_here', 'lyricname': 'lyric_here', 'currentrank': 999, 'favor': 1, 'deleteflag': 0}
-    # test_hMusicDB(hMusicDB, musicInfo)
+    # elif(args.operation == "rm"):
+    #     logger.debug("remove user ----")
+    #     try:
+    #         userInfo
+    #     except NameError:
+    #         userInfo = {'uid': args.uID, 'passwd': "", 'privilege': False}
 
-    # # TEST : HandleMusic
-    # test_hMusic(HandleMusic(), dbInfo, DB_NAME, TEMP_UID)
+    #     removeUser(dbCon, DB_NAME, USER_TB, HOME_DIR, userInfo)
 
-    # # TEST : make class
-    # test_class()
+    # if (args.rank):
+    #     logger.debug("update rank based on melon top 100 chart")
+    #     try:
+    #         userInfo
+    #     except NameError:
+    #         userInfo = getUserAccount("Welcome Home_Music.", args.uID)
 
-    # hFile = HandleFile()
-    # hTag = HandleTag()
+    #     updateRank(dbCon, DB_NAME, userInfo['uid'], PHANTOMJS_PATH)
 
-    # fList = hFile.mkFileList("imsi2")
+    # if (args.update):
+    #     logger.debug("update database based on melop top 100 chart")
+    #     try:
+    #         userInfo
+    #     except NameError:
+    #         userInfo = getUserAccount("Welcom Home_Music.", args.uID)
+    #     updateMusicDB(dbCon, DB_NAME, userInfo['uid'], [
+    #                   os.path.join(HOME_DIR, userInfo['uid']), ])
 
-    # i = 0
-    # for ff in fList:
-    #     i = i + 1
-    #     print(i, end=" : ")
-    #     print(pathlib.PurePath(ff).name, end=" : ")
-    #     print(hTag.getTag(ff))
+    # if(args.musicsList):
+    #     try:
+    #         userInfo       # check if userinfo is defined or not
+    #     except NameError:
+    #         userInfo = getUserAccount("Welcome Home_Music.", args.uID)
 
-    # hFile.mvFile('_tmpImage', 'Img_' + pathlib.PurePath(ff).stem+".jpg")
-    logger.setLevel(logging.INFO)
-
-    hm = HandleMusic()
-    print(hm.mkMusicInfo('imsi2'))
+    #     if (existUser(dbCon, DB_NAME, USER_TB, userInfo)):
+    #         if (checkUser(dbCon, DB_NAME, USER_TB, userInfo, """where loginID='{uid}' and passwd='{pwd}'""")):
+    #             addMusic(dbCon, DB_NAME, HOME_DIR, userInfo, args.musicsList)
+    #         else:
+    #             logger.error("{uid}\'s password is incorrect".format(
+    #                 uid=userInfo['uid']))
+    #     else:
+    #         logger.error("{uid} is not a user. please add user accout first".format(
+    #             uid=userInfo['uid']))
