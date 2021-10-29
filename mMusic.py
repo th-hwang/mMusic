@@ -156,7 +156,7 @@ class HandleDB:
 
     def _where(self, dic):
         # make [ where key1=%({key1})s and key2 = %({key2})s; ]
-        # sql = """select * from {db}.{tb} where loginID = %(loginID)s and passwd= %(passwd)s and privilege=%(privilige)s"""
+        # 예) sql = """select * from {db}.{tb} where loginID = %(loginID)s and passwd= %(passwd)s and privilege=%(privilige)s"""
         wh_Org = """ where """
         wh = wh_Org
         for key, value in dic.items():
@@ -170,7 +170,7 @@ class HandleDB:
 
     def _values(self, dic):
         # make [ (key1, key2, key3) values (%({key1})s, %({key2})s, %({key3})s); ]
-        # sql = """insert {db}.{tb} (loginID, passwd, privilege) values (%(loginID), %(passwd)s, %(privilige))"""
+        # 예) sql = """insert {db}.{tb} (loginID, passwd, privilege) values (%(loginID), %(passwd)s, %(privilige))"""
         val_Org = " ( "
         keys = val_Org
         vals = val_Org
@@ -192,7 +192,7 @@ class HandleDB:
 
     def _set(self, dic):
         # make [ set key1 = '%({key1})s', key2 = '%({key2})s']
-        # sql = """update {db}.{tb} set passwd='%({pwd})s', privilege=%({pr})s where loginID='%({loginID})s'; """
+        # 예) sql = """update {db}.{tb} set passwd='%({pwd})s', privilege=%({pr})s where loginID='%({loginID})s'; """
         se_Org = " set "
         se = se_Org
 
@@ -488,8 +488,44 @@ class HandleMusicDB(HandleDB):
             logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be updated",
                          musicInfo['artist'], musicInfo['title'], self.tbName, self.dbName)
             return False
+    
+    def _setAllDeleteFlag(self):
+        logger.debug("Setting delete-flag of all music to on")
+        sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(db=self.dbName, tb=self.tbName)
+        return True if self._sendQuery(sql, data=musicInfo, mode="DML") == None else False
+      
+    def _setDeleteFlagArtistTitle(self, artist, title):
+        if (self.isExistMusicArtistTitle(artist, title)):
+            logger.debug("Setting the delete flag of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]", title, artist, self.tbName, self.dbName)
+            sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+        else:
+            logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot set deleteflag",title, artist, self.tbName, self.dbName)
+            return False
+    
+    def _unsetDeleteFlagArtistTitle(self, artist, title):
+        if (self.isExistMusicArtistTitle(artist, title)):
+            logger.debug("Unsetting the delete flag of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]", title, artist, self.tbName, self.dbName)
+            sql = """UPDATE {db}.{tb} SET deleteflag=False""".format(db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+        else:
+            logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot unset deleteflag",title, artist, self.tbName, self.dbName)
+            return False
+    
+    def _increaseFavorArtistTitle(self, artist, title):
+        if (self.isExistMusicArtistTitle(artist, title)):
+            logger.debug("Increasing the favor of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]", title, artist, self.tbName, self.dbName)
+            sql = """UPDATE {db}.{tb} SET favor=favor+1""".format(db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+        else:
+            logger.error("The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot increase favor",title, artist, self.tbName, self.dbName)
+            return False
 
-
+    def _rmAllRecordDeleteFlag(self):
+        logger.debug("Deleting music records having on delete-flag ")
+        sql = """Delete from {db}.{tb} where deleteflag=True""".format(db=self.dbName, tb=self.tbName)
+        return True if self._sendQuery(sql, data=musicInfo, mode="DML") == None else False
+    
 class HandleMusicTag:
 
     def __init__(self):
@@ -604,11 +640,6 @@ class HandleFile:
 
 
 class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
-
-    # userID를 인수로 받아서 그 이름의 music table을 만들고
-    # 파일/디렉토리를 인수로 받아서 music tag를 얻어서
-    # music tabel에 입력하고 target directory 로 옮김
-
     def __init__(self, dbInfo={}, dbName='', tbName=''):
         logger.debug(
             "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
@@ -643,6 +674,19 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
 
         return result
 
+    def syncMusicDBtoDir(self, musicDir):
+        # music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
+        logger.info("Syncing Music Database to the music dir [%s] .....",musicDir)
+        
+        self._setAllDeleteFlag()
+        
+        for ff in self.mkFileList(musicDir):
+        tag = self.getTag(ff)
+        self._unsetDeleteFlagArtistTitle(aritst = tag['artist'], title = tag['title'])
+        self._increaseFavorArtistTitle(aritst = tag['artist'], title = tag['title'])
+        
+        return self._rmAllRecordDeleteFlag()  
+  
     # def addMusic(dbCon, dbName, homeDir, userInfo, musicList):
     #     logger.debug("Adding musics list ---")
 
@@ -671,51 +715,6 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
     #             insertMusicRecord(dbCon, dbName, musicTB, tag)
     #             shutil.move(ff, dstDir)
 
-    # def updateMusicDB(dbCon, dbName, musicTB, musicDir):  # musicDir should be list
-    #     logger.info("Updating Database .....")
-    #     music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
-
-    #     setDeleteFlag(dbCon, dbName, musicTB)
-
-    #     for ff in makeMusicList(musicDir):
-    #         tag = getTag(ff)
-    #         if (isInMusicDB_ArtistTitle(dbCon, dbName, musicTB, tag)):
-    #             unsetDeleteFlag(dbCon, dbName, musicTB, tag)
-    #             increaseFavor(dbCon, dbName, musicTB, tag)
-
-    #     return deleteMusicRecord(dbCon, dbName, musicTB)
-
-    # def setDeleteFlag(dbCon, dbName, musicTB):
-    #     logger.debug("Setting delete-flag of all music to on")
-    #     sql = """update {db}.{tb} set deleteflag=True"""
-    #     sql = sql.format(db=dbName, tb=musicTB)
-
-    #     return sendQuery(dbCon, sql, mode="DML")
-
-    # def unsetDeleteFlag(dbCon, dbName, musicTB, tag):
-    #     logger.debug("Setting delete-flag of all music to off")
-    #     sql = """update {db}.{tb} set deleteflag=False where title = "{ti}" and artist="{ar}" """
-    #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
-    #         tag['title']), ar=simplify(tag['artist']))
-
-    #     return sendQuery(dbCon, sql, mode="DML")
-
-    # def increaseFavor(dbCon, dbName, musicTB, tag):
-    #     logger.debug("Increasing favorite number of music")
-    #     sql = """update {db}.{tb} set favor=favor+1 where title = "{ti}" and artist="{ar}" """
-    #     sql = sql.format(db=dbName, tb=musicTB, ti=simplify(
-    #         tag['title']), ar=simplify(tag['artist']))
-
-    #     return sendQuery(dbCon, sql, mode="DML")
-
-    # def deleteMusicRecord(dbCon, dbName, musicTB):
-    #     logger.debug("Deleting music records having on delete-flag ")
-    #     sql = """delete from {db}.{tb} where deleteflag=True"""
-    #     sql = sql.format(db=dbName, tb=musicTB)
-
-    #     return sendQuery(dbCon, sql, mode="DML")
-
-
 if __name__ == "__main__":
 
     # setting define directory
@@ -725,8 +724,8 @@ if __name__ == "__main__":
     DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
     # HOME_DIR = "/common/Musics/"
-    HOME_DIR = "/Users/taehyunghwang/Music"
-
+    MUSIC_HOME = "/Users/taehyunghwang/Music"
+    
     # parsing argument
     parser = argparse.ArgumentParser()
 
@@ -739,9 +738,9 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--log", required=False,
                         action="store_true", help="make log file in account directory")
     # parser.add_argument("-r", "--rank", required=False, action="store_true",
-    # #                     help="update music rank based on melop top 100 chart")
-    # parser.add_argument("-up", "--update", required=False, action="store_true",
-    #                     help="update database based on music in the directory")
+    #                      help="update music rank based on melop top 100 chart")
+    parser.add_argument("-sync", "--sync", required=False, action="store_true",
+                        help="update database based on music in the Music home directory")
 
     args = parser.parse_args()
 
@@ -751,6 +750,7 @@ if __name__ == "__main__":
         '[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
 
     if (args.log):
+        
         fPath = pathlib.PurePath(HOME_DIR).joinpath(args.uID)
         HandleFile().mkDir(fPath)
         fileHandler = logging.handlers.RotatingFileHandler(
@@ -764,9 +764,12 @@ if __name__ == "__main__":
 
     logger.setLevel(logging.INFO)
     # logger.setLevel(logging.DEBUG)
-
+    
+    # make class
+    logger.debug("Making class .... ")
+    hMusic = HandleMusic(dbInfo={'dbHost':DB_HOST, 'dbUser':DB_USER, 'dbPasswd' : DB_PASSWD}, dbName = DB_NAME, tbName = args.uID)
+    
     logger.debug("Handling argument")
-
     # if(args.operation == "add"):
     #     logger.debug("Add user ----")
     #     try:
@@ -794,14 +797,15 @@ if __name__ == "__main__":
 
     #     updateRank(dbCon, DB_NAME, userInfo['uid'], PHANTOMJS_PATH)
 
-    # if (args.update):
-    #     logger.debug("update database based on melop top 100 chart")
-    #     try:
-    #         userInfo
-    #     except NameError:
-    #         userInfo = getUserAccount("Welcom Home_Music.", args.uID)
-    #     updateMusicDB(dbCon, DB_NAME, userInfo['uid'], [
-    #                   os.path.join(HOME_DIR, userInfo['uid']), ])
+    if (args.sync):
+        logger.debug("Syncing Music Database to the MUSIC_HOME dir [%s] .....", MUSIC_HOME)
+
+        # try:
+        #     userInfo
+        # except NameError:
+        #     userInfo = getUserAccount("Welcom Home_Music.", args.uID)
+            
+        hMusic.syncMusicDBtoDir(pathlib.PurePath(MUSIC_HOME).joinpath(args.uID))    
 
     # if(args.musicsList):
     #     try:
