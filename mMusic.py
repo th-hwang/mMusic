@@ -205,7 +205,6 @@ class HandleDB:
 
         return se if len(se) > len(se_Org) else ""
 
-
 class HandleUserDB(HandleDB):
 
     def __init__(self, dbInfo={}, dbName='', tbName=''):
@@ -347,7 +346,6 @@ class HandleUserDB(HandleDB):
             logger.error("Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
                          userInfo['loginID'], self.tbName, self.dbName)
             return False
-
 
 class HandleMusicDB(HandleDB):
 
@@ -580,7 +578,6 @@ class HandleMusicTag:
             # tilte TIT2, artist TPE1, album TALB, genre TCON
             return value.text[0]
 
-
 class HandleFile:
     def __init__(self):
         logger.debug("Initializing HandleFile Class")
@@ -638,13 +635,26 @@ class HandleFile:
             logger.error("%s. Error in mvFile [%s] to [%s] ", e, src, tgt)
             raise
 
+class HandleUser (HandleUserDB, HandleFile):
+    def __init__(self, dbInfo={}, dbName='', tbName=''):
+        logger.debug(
+            "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
+        super(HandleUser, self).__init__(dbInfo, dbName, tbName)
+        
 
+    def __del__(self):
+        logger.debug("Deleting HandleMusic Class")
+        super(HandleUser, self).__del__()
+    
+    def getUserInfo(self, msg, uID):
+        #  id 와 passwd를 받아서 user table의 값과 비교하여 맞으면 userInfo를 리턴함, user가 없으면 None 리턴함.
+        return {'loginID': 'karlken', 'passwd': 'imsi', 'privilege' : True, 'deleteflag': False }
+        
 class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
     def __init__(self, dbInfo={}, dbName='', tbName=''):
         logger.debug(
             "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
         super(HandleMusic, self).__init__(dbInfo, dbName, tbName)
-        pass
 
     def __del__(self):
         logger.debug("Deleting HandleMusic Class")
@@ -681,9 +691,9 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         self._setAllDeleteFlag()
         
         for ff in self.mkFileList(musicDir):
-        tag = self.getTag(ff)
-        self._unsetDeleteFlagArtistTitle(aritst = tag['artist'], title = tag['title'])
-        self._increaseFavorArtistTitle(aritst = tag['artist'], title = tag['title'])
+            tag = self.getTag(ff)
+            self._unsetDeleteFlagArtistTitle(aritst = tag['artist'], title = tag['title'])
+            self._increaseFavorArtistTitle(aritst = tag['artist'], title = tag['title'])
         
         return self._rmAllRecordDeleteFlag()  
   
@@ -733,13 +743,13 @@ if __name__ == "__main__":
                         metavar="userID", type=str, help="user id")
     parser.add_argument("-s", "--musicsList", required=False,
                         nargs="+",  help="music file or directory having them")
-    # parser.add_argument("-op", "--operation", required=False,
+    # parser.add_argument("-o", "--operation", required=False,
     #                     choices={'add', 'rm'}, help="add or remove user account")
     parser.add_argument("-l", "--log", required=False,
                         action="store_true", help="make log file in account directory")
     # parser.add_argument("-r", "--rank", required=False, action="store_true",
     #                      help="update music rank based on melop top 100 chart")
-    parser.add_argument("-sync", "--sync", required=False, action="store_true",
+    parser.add_argument("-c", "--sync", required=False, action="store_true",
                         help="update database based on music in the Music home directory")
 
     args = parser.parse_args()
@@ -750,7 +760,6 @@ if __name__ == "__main__":
         '[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
 
     if (args.log):
-        
         fPath = pathlib.PurePath(HOME_DIR).joinpath(args.uID)
         HandleFile().mkDir(fPath)
         fileHandler = logging.handlers.RotatingFileHandler(
@@ -767,7 +776,10 @@ if __name__ == "__main__":
     
     # make class
     logger.debug("Making class .... ")
-    hMusic = HandleMusic(dbInfo={'dbHost':DB_HOST, 'dbUser':DB_USER, 'dbPasswd' : DB_PASSWD}, dbName = DB_NAME, tbName = args.uID)
+    dbInfo={'dbHost':DB_HOST, 'dbUser':DB_USER, 'dbPasswd' : DB_PASSWD}
+    
+    hUser = HandleUser(dbInfo = dbInfo, dbName = DB_NAME, tbName = USER_TB_NAME)
+    hMusic = HandleMusic(dbInfo = dbInfo, dbName = DB_NAME, tbName = args.uID)
     
     logger.debug("Handling argument")
     # if(args.operation == "add"):
@@ -799,26 +811,25 @@ if __name__ == "__main__":
 
     if (args.sync):
         logger.debug("Syncing Music Database to the MUSIC_HOME dir [%s] .....", MUSIC_HOME)
+        
+        userInfo = hUser.getUserInfo("Welcom Home_Music.", args.uID)
+        if not userInfo == None :
+            hMusic.syncMusicDBtoDir(pathlib.PurePath(MUSIC_HOME).joinpath(userInfo['loginID']))    
 
+    if(args.musicsList):
+        pass
+    
         # try:
-        #     userInfo
+        #     userInfo       # check if userinfo is defined or not
         # except NameError:
-        #     userInfo = getUserAccount("Welcom Home_Music.", args.uID)
-            
-        hMusic.syncMusicDBtoDir(pathlib.PurePath(MUSIC_HOME).joinpath(args.uID))    
+        #     userInfo = getUserAccount("Welcome Home_Music.", args.uID)
 
-    # if(args.musicsList):
-    #     try:
-    #         userInfo       # check if userinfo is defined or not
-    #     except NameError:
-    #         userInfo = getUserAccount("Welcome Home_Music.", args.uID)
-
-    #     if (existUser(dbCon, DB_NAME, USER_TB, userInfo)):
-    #         if (checkUser(dbCon, DB_NAME, USER_TB, userInfo, """where loginID='{uid}' and passwd='{pwd}'""")):
-    #             addMusic(dbCon, DB_NAME, HOME_DIR, userInfo, args.musicsList)
-    #         else:
-    #             logger.error("{uid}\'s password is incorrect".format(
-    #                 uid=userInfo['uid']))
-    #     else:
-    #         logger.error("{uid} is not a user. please add user accout first".format(
-    #             uid=userInfo['uid']))
+        # if (existUser(dbCon, DB_NAME, USER_TB, userInfo)):
+        #     if (checkUser(dbCon, DB_NAME, USER_TB, userInfo, """where loginID='{uid}' and passwd='{pwd}'""")):
+        #         addMusic(dbCon, DB_NAME, HOME_DIR, userInfo, args.musicsList)
+        #     else:
+        #         logger.error("{uid}\'s password is incorrect".format(
+        #             uid=userInfo['uid']))
+        # else:
+        #     logger.error("{uid} is not a user. please add user accout first".format(
+        #         uid=userInfo['uid']))
