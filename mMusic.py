@@ -1,4 +1,4 @@
-#!/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 # ver 0.1 : release 19.08.07
 # ver 0.2 : support ranking  based on melon top 100 chart
@@ -15,7 +15,7 @@ from mutagen import id3
 import argparse
 import getpass
 import hashlib
-from selenium import webdriver
+import requests
 from bs4 import BeautifulSoup
 
 
@@ -655,7 +655,9 @@ class HandleFile:
             logger.debug("[ERROR] %s. Error in rmDir() [%s]", e, strDir)
             raise
 
-    def mkFileList(self, diretory):
+    def mkFileList(self, directory):
+        logger.info("Making file list in directory [%s]", directory)
+
         def walk(path):
             for p in pathlib.Path(path).iterdir():
                 if p.is_dir():
@@ -664,7 +666,7 @@ class HandleFile:
                 yield p.resolve()
 
         result = []
-        for ff in diretory if type(diretory) is list else [diretory]:
+        for ff in directory if type(directory) is list else [directory]:
             hPath = pathlib.Path(ff)
             if(hPath.is_dir()):
                 logger.info("%s is directory. Walk into the directory " % ff)
@@ -790,7 +792,6 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
     def addMusics(self, musicInfos, musicHome):
         logger.info(
             "Adding Music files to the music home dir [%s] .....", musicHome)
-        self.syncMusicDBtoDir(musicHome)
         self.insertMusics(musicInfos, musicHome)
 
     def insertMusics(self, musicInfos, musicHome):
@@ -826,47 +827,25 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         return str(tgtFilePath)
 
 
-class webScraping:
-    def __init__(self, webDriverPath=""):
-        if not webDriverPath == "":
-            self.setWebDriver(webDriverPath)
-        super(webScraping, self).__init__()
+class HandleRank():
+    def __init__(self):
+        pass
 
     def __del__(self):
         pass
 
-    def setWebDriver(self, webDriverPath):
-
-        webDriverOption = webdriver.ChromeOptions()
-        webDriverOption.add_argument('headless')
-        webDriverOption.add_argument('disable-gpu')
-        webDriverOption.add_argument(
-            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)'
-            + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36')
-
-        self.webDriver = webdriver.Chrome(
-            webDriverPath, options=webDriverOption)
-
-        return self.webDriver
-
-
-class HandleRank(webScraping):
-    def __init__(self, webDriverPath=""):
-        super(HandleRank, self).__init__(webDriverPath)
-
-    def __del__(self):
-        super(HandleRank, self).__del__()
-
     def getMelonRank(self):
+
         logger.info("Crawling Melon Top 100 chart ..... ")
 
-        self.webDriver.get("http://www.melon.com/chart/index.htm")
+        user_agent = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)'
+                      ' AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36')
+        headers = {'User-Agent': user_agent}
 
-        # webDriver.save_screenshot("/Users/taehyunghwang/pyWorks/test.png")
-        # print (webDriver.page_source)
+        response = requests.get(
+            "http://www.melon.com/chart/index.htm", headers=headers)
 
-        soup = BeautifulSoup(self.webDriver.page_source, "html.parser")
-        self.webDriver.quit()
+        soup = BeautifulSoup(response.content, "html.parser")
 
         logger.info("Parsing Melon Top 100 chart ..... ")
 
@@ -882,7 +861,7 @@ class HandleRank(webScraping):
 
         return result
 
-    def getRank(self, musicInfo, chartList, th=0.5):  # if matchingRate >50%
+    def getRankLetterMatch(self, musicInfo, chartList, th=0.5):  # if matchingRate >50%
         logger.debug("Updating the rank of music with chart list")
 
         maxMR = 0.0
@@ -896,7 +875,23 @@ class HandleRank(webScraping):
                 maxMR = curMR
                 rank = item['rank']
 
-        return rank if maxMR > th else None
+        return rank if maxMR > th else 999
+
+    def getRank(self, musicInfo, chartList, th=0.2):
+        logger.debug("Updating the rank of music with chart list")
+
+        minMR = 10
+
+        for item in chartList if type(chartList) is list else [chartList]:
+
+            curDist = self.edit_distance(musicInfo['title'], item['title'])
+            curMR = float(curDist)/float(len(musicInfo['title']))
+
+            if curMR <= minMR:
+                minMR = curMR
+                rank = item['rank']
+
+        return rank if minMR <= th else 999
 
     def updateRank(self, musicInfos):
         logger.debug("update rank based on melon top 100 chart")
@@ -904,8 +899,8 @@ class HandleRank(webScraping):
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
             rank = self.getRank(musicInfo, chartList)
             if not rank == None:
-                logger.info("{fn}'s rank in Melon TOP 100 : \t [ {oldRank} ] -------> [ {newRank} ]".format(
-                    fn=musicInfo['title'], oldRank=musicInfo['currentrank'], newRank=rank))
+                logger.info("[Melon TOP 100] : [{nR}] {fn}".format(
+                    nR=rank, fn=musicInfo['title']))
                 musicInfo['currentrank'] = rank
 
     def matchingRate(self, src, ref):
@@ -926,6 +921,30 @@ class HandleRank(webScraping):
 
         return float(cnt)/float(len(src))
 
+    # Levenstein Distance
+    def edit_distance(sefl, s: str, t: str):
+        m = len(s)+1
+        n = len(t)+1
+        D = [[0]*m for _ in range(n)]
+        D[0][0] = 0
+
+        for i in range(1, m):
+            D[0][i] = D[0][i-1] + 1
+
+        for j in range(1, n):
+            D[j][0] = D[j-1][0] + 1
+
+        for i in range(1, n):
+            for j in range(1, m):
+                cost = 0
+
+                if s[j-1] != t[i-1]:
+                    cost = 1
+
+                D[i][j] = min(D[i][j-1] + 1, D[i-1][j] + 1, D[i-1][j-1] + cost)
+
+        return D[n-1][m-1]
+
 
 if __name__ == "__main__":
 
@@ -935,9 +954,10 @@ if __name__ == "__main__":
     DB_PASSWD = "kodi"
     DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
-    # MUSIC_HOME_BASE = "/common/Musics/"
-    MUSIC_HOME_BASE = "/Users/taehyunghwang/Music"
-    WEB_DRIVER_PHATH = "/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/chromedriver"
+    MUSIC_HOME_BASE = "/common/Musics/"
+    #MUSIC_HOME_BASE = "/Users/taehyunghwang/Music"
+    #WEB_DRIVER_PHATH = "/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/chromedriver"
+    # rk3228 is 32bit ARM, there is no 32bit chrome
 
     # parsing argument
     parser = argparse.ArgumentParser()
@@ -987,7 +1007,7 @@ if __name__ == "__main__":
 
     if not userInfo == None:
         hMusic = HandleMusic(dbInfo=dbInfo, dbName=DB_NAME, tbName=args.uID)
-        hRank = HandleRank(WEB_DRIVER_PHATH)
+        hRank = HandleRank()
 
         musicHome = pathlib.PurePath(
             MUSIC_HOME_BASE).joinpath(userInfo['loginID'])
