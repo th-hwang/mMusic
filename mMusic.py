@@ -15,6 +15,8 @@ from mutagen import id3
 import argparse
 import getpass
 import hashlib
+from selenium import webdriver
+from bs4 import BeautifulSoup
 
 
 class HandleDB:
@@ -160,16 +162,19 @@ class HandleDB:
     def _where(self, dic):
         # make [ where key1=%({key1})s and key2 = %({key2})s; ]
         # 예) sql = """select * from {db}.{tb} where loginID = %(loginID)s and passwd= %(passwd)s and privilege=%(privilige)s"""
-        wh_Org = """ where """
-        wh = wh_Org
-        for key, value in dic.items():
-            if not value == "":
-                if len(wh) > len(wh_Org):
-                    wh = wh + " and "
+        if not len(dic) == 0:
+            wh_Org = """ where """
+            wh = wh_Org
+            for key, value in dic.items():
+                if not value == "":
+                    if len(wh) > len(wh_Org):
+                        wh = wh + " and "
 
-                wh = wh + """{key}=%({key})s""".format(key=key)
+                    wh = wh + """{key}=%({key})s""".format(key=key)
 
-        return wh + ";" if len(wh) > len(wh_Org) else ";"
+            return wh + ";" if len(wh) > len(wh_Org) else ";"
+        else:
+            return ";"
 
     def _values(self, dic):
         # make [ (key1, key2, key3) values (%({key1})s, %({key2})s, %({key3})s); ]
@@ -316,7 +321,7 @@ class HandleUserDB(HandleDB):
     def getUserAccount(self, userInfo):
         if (self.isExistUser(userInfo)):
             logger.debug(
-                "Getting the user info in DB of user info [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Getting the user info records having user info [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
             sql = """select * from {db}.{tb}""".format(
                 db=self.dbName, tb=self.tbName) + self._where(userInfo)
 
@@ -422,7 +427,7 @@ class HandleMusicDB(HandleDB):
 
         return self.isExistMusic({'title': title, 'artist': artist})
 
-    def addMusicRecords(self, musicInfos):
+    def addMusicInfos(self, musicInfos):
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
             if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
                 logger.debug("[ERROR] The music info record having title [%s] and artist [%s] exists in the music table [%s] of the database [%s] and thus cannot be added",
@@ -438,7 +443,7 @@ class HandleMusicDB(HandleDB):
 
                 self._sendQuery(sql, data=musicInfo, mode="DML")
 
-    def rmMusicRecordArtistTitle(self, artist, title):
+    def rmMusicInfoArtistTitle(self, artist, title):
         if (self.isExistMusicArtistTitle(artist, title)):
             logger.debug(
                 "Removing the muisc info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]",
@@ -454,32 +459,37 @@ class HandleMusicDB(HandleDB):
                 title, artist, self.tbName, self.dbName)
             return False
 
-    def getMusicRecordArtistTitle(self, artist, title):
-        if (self.isExistMusicArtistTitle(artist, title)):
-            logger.debug(
-                "Getting the music info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]",
-                title, artist, self.tbName, self.dbName)
-            sql = """select * from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+    def getMusicInfoArtistTitle(self, artist, title):
+        return self.getMusicInfos(musicInfo={'title': title, 'artist': artist})
 
-            rlt = self._sendQuery(sql, data={'title': title, 'artist': artist})
-            if not rlt == None:
-                result = []
-                for v in rlt:
-                    result.append(
-                        {'title': v[1], 'artist': v[2], 'album': v[3], 'sdate': v[4], 'genre': v[5], 'filename': v[6], 'imgname': v[7],
-                         'lyricname': v[8], 'currentrank': v[9], 'favor': v[10], 'deleteflag': v[11]})
-                return result
-            else:
-                logger.debug(
-                    "Cannot find the music info record having title [%s] and artist [%s]", title, artist)
-                return None
+    def getMusicInfos(self, musicInfo={}):
+        logger.debug(
+            "Getting the music info records having musicInfo [%s] from the user table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+
+        sql = """select * from {db}.{tb}""".format(
+            db=self.dbName, tb=self.tbName) + self._where(musicInfo)
+
+        rlt = self._sendQuery(sql, data=musicInfo)
+
+        if not rlt == None:
+            result = []
+            for v in rlt:
+                result.append(
+                    {'title': v[1], 'artist': v[2], 'album': v[3], 'sdate': v[4], 'genre': v[5], 'filename': v[6], 'imgname': v[7],
+                     'lyricname': v[8], 'currentrank': v[9], 'favor': v[10], 'deleteflag': v[11]})
+            return result
         else:
-            logger.debug("[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot get account info",
-                         title, artist, self.tbName, self.dbName)
-        return None
+            logger.debug(
+                "Cannot find the music info record having musicInfo [%s]", musicInfo)
+            return None
 
-    def updateMusicRecord(self, musicInfo):
+    def updateMusicInfos(self, musicInfos):
+
+        for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
+            if self._updateMusicInfo(musicInfo) == False:
+                return None
+
+    def _updateMusicInfo(self, musicInfo):
         if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
             logger.debug(
                 "Updating the music info record [%s] from the user table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
@@ -541,7 +551,7 @@ class HandleMusicDB(HandleDB):
                 title, artist, self.tbName, self.dbName)
             return False
 
-    def _rmAllRecordDeleteFlag(self):
+    def _rmAllDeleteFlag(self):
         logger.debug("Deleting music records having on delete-flag ")
         sql = """Delete from {db}.{tb} where deleteflag=True""".format(
             db=self.dbName, tb=self.tbName)
@@ -559,10 +569,16 @@ class HandleMusicTag:
     def __del__(self):
         logger.debug("Deleting HandleMusicTag Class")
 
-    def getTag(self, fName):
+    def getTagArtistTitle(self, fName):
+        return self.getTag(fName, id3Frames={'title': 'TIT2', 'artist': 'TPE1'})
+
+    def getTag(self, fName, id3Frames={}):
         # All strings are unicode in python3. we don't need to decode string anymore.
         logger.debug("Gathering ID3 Tag of [%s]", fName)
         result = {}
+
+        if len(id3Frames) == 0:
+            id3Frames = self.id3Frames
         try:
             # music 파일이 아니면 로딩시에 에러 발생. file doesn't start with an ID3 tag.
             # 에러 발생시 return None 하므로 return 값 확인에서 None이 아니면 tagResults에 넣음.
@@ -581,7 +597,7 @@ class HandleMusicTag:
 
             tagList = tag.items()
 
-            for col, frame in self.id3Frames.items():
+            for col, frame in id3Frames.items():
                 for key, value in tagList:
                     if frame in key:
                         result[col] = self._tagParsing(frame, value, fName)
@@ -639,7 +655,7 @@ class HandleFile:
             logger.debug("[ERROR] %s. Error in rmDir() [%s]", e, strDir)
             raise
 
-    def mkFileList(self, fileList):
+    def mkFileList(self, diretory):
         def walk(path):
             for p in pathlib.Path(path).iterdir():
                 if p.is_dir():
@@ -648,7 +664,7 @@ class HandleFile:
                 yield p.resolve()
 
         result = []
-        for ff in fileList if type(fileList) is list else [fileList]:
+        for ff in diretory if type(diretory) is list else [diretory]:
             hPath = pathlib.Path(ff)
             if(hPath.is_dir()):
                 logger.info("%s is directory. Walk into the directory " % ff)
@@ -762,14 +778,14 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
 
         for ff in self.mkFileList(musicDir):
 
-            tag = self.getTag(ff)
+            tag = self.getTagArtistTitle(ff)
             if not tag == None:
                 self._unsetDeleteFlagArtistTitle(
                     artist=tag['artist'], title=tag['title'])
                 self._increaseFavorArtistTitle(
                     artist=tag['artist'], title=tag['title'])
 
-        return self._rmAllRecordDeleteFlag()
+        return self._rmAllDeleteFlag()
 
     def addMusics(self, musicInfos, musicHome):
         logger.info(
@@ -799,7 +815,7 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
                     musicInfo['lyricname'] = self._mvFileToMusicHome(
                         musicInfo['lyricname'], pathlib.PurePath(musicHome).joinpath("Lyric"))
 
-                self.addMusicRecords(musicInfo)
+                self.addMusicInfos(musicInfo)
 
     def _mvFileToMusicHome(self, srcFilePath, tgtBasePath):
         fileName = pathlib.PurePath(srcFilePath).name
@@ -808,6 +824,107 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         self.mvFile(srcFilePath, tgtFilePath)
 
         return str(tgtFilePath)
+
+
+class webScraping:
+    def __init__(self, webDriverPath=""):
+        if not webDriverPath == "":
+            self.setWebDriver(webDriverPath)
+        super(webScraping, self).__init__()
+
+    def __del__(self):
+        pass
+
+    def setWebDriver(self, webDriverPath):
+
+        webDriverOption = webdriver.ChromeOptions()
+        webDriverOption.add_argument('headless')
+        webDriverOption.add_argument('disable-gpu')
+        webDriverOption.add_argument(
+            'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)'
+            + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36')
+
+        self.webDriver = webdriver.Chrome(
+            webDriverPath, options=webDriverOption)
+
+        return self.webDriver
+
+
+class HandleRank(webScraping):
+    def __init__(self, webDriverPath=""):
+        super(HandleRank, self).__init__(webDriverPath)
+
+    def __del__(self):
+        super(HandleRank, self).__del__()
+
+    def getMelonRank(self):
+        logger.info("Crawling Melon Top 100 chart ..... ")
+
+        self.webDriver.get("http://www.melon.com/chart/index.htm")
+
+        # webDriver.save_screenshot("/Users/taehyunghwang/pyWorks/test.png")
+        # print (webDriver.page_source)
+
+        soup = BeautifulSoup(self.webDriver.page_source, "html.parser")
+        self.webDriver.quit()
+
+        logger.info("Parsing Melon Top 100 chart ..... ")
+
+        result = []
+
+        for tName in ('lst50', 'lst100'):
+            for row in soup.find_all("tr", {"class": tName}):
+                tmp = {'rank': row.find("span", {"class": "rank"}).get_text(),
+                       'title': row.find("div", {"class": "ellipsis rank01"}).find("a").get_text(),
+                       'artist': row.find("div", {"class": "ellipsis rank02"}).find("a").get_text(),
+                       'album': row.find("div", {"class": "ellipsis rank03"}).find("a").get_text()}
+                result.append(tmp)
+
+        return result
+
+    def getRank(self, musicInfo, chartList, th=0.5):  # if matchingRate >50%
+        logger.debug("Updating the rank of music with chart list")
+
+        maxMR = 0.0
+
+        for item in chartList if type(chartList) is list else [chartList]:
+
+            curMR = self.matchingRate(
+                musicInfo['title']+musicInfo['artist'], item['title']+item['artist'])
+
+            if curMR >= maxMR:
+                maxMR = curMR
+                rank = item['rank']
+
+        return rank if maxMR > th else None
+
+    def updateRank(self, musicInfos):
+        logger.debug("update rank based on melon top 100 chart")
+        chartList = self.getMelonRank()
+        for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
+            rank = self.getRank(musicInfo, chartList)
+            if not rank == None:
+                logger.info("{fn}'s rank in Melon TOP 100 : \t [ {oldRank} ] -------> [ {newRank} ]".format(
+                    fn=musicInfo['title'], oldRank=musicInfo['currentrank'], newRank=rank))
+                musicInfo['currentrank'] = rank
+
+    def matchingRate(self, src, ref):
+        logger.debug("Counting if each letter of src [{sc}] is in tgt [{rf}] and return the ratio of the count to total length of tgt".format(
+            sc=src, rf=ref))
+
+        cnt = 0
+
+        for i in range(0, len(src)):
+
+            if src[i:i+1] in ref:
+                cnt += 1
+                logger.debug("src[i:i+1]  - " + src[i:i+1] +
+                             " : True, Count : "+str(cnt)+"/"+str(len(src)))
+            else:
+                logger.debug("src[i:i+1]  - " + src[i:i+1] +
+                             " : False, Count : "+str(cnt)+"/"+str(len(src)))
+
+        return float(cnt)/float(len(src))
 
 
 if __name__ == "__main__":
@@ -820,6 +937,7 @@ if __name__ == "__main__":
     USER_TB_NAME = "User_Table"
     # MUSIC_HOME_BASE = "/common/Musics/"
     MUSIC_HOME_BASE = "/Users/taehyunghwang/Music"
+    WEB_DRIVER_PHATH = "/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/chromedriver"
 
     # parsing argument
     parser = argparse.ArgumentParser()
@@ -832,8 +950,8 @@ if __name__ == "__main__":
                         choices={'add', 'rm'}, help="add or remove user account")
     parser.add_argument("-l", "--log", required=False,
                         action="store_true", help="make log file in account directory")
-    # parser.add_argument("-r", "--rank", required=False, action="store_true",
-    #                      help="update music rank based on melop top 100 chart")
+    parser.add_argument("-r", "--rank", required=False, action="store_true",
+                        help="update music rank based on melop top 100 chart")
     parser.add_argument("-c", "--sync", required=False, action="store_true",
                         help="update database based on music in the Music home directory")
 
@@ -862,14 +980,15 @@ if __name__ == "__main__":
     # make class
     logger.debug("Making class .... ")
     dbInfo = {'dbHost': DB_HOST, 'dbUser': DB_USER, 'dbPasswd': DB_PASSWD}
-
     hUser = HandleUser(dbInfo=dbInfo, dbName=DB_NAME, tbName=USER_TB_NAME)
-    hMusic = HandleMusic(dbInfo=dbInfo, dbName=DB_NAME, tbName=args.uID)
 
     logger.debug("Handling argument")
     userInfo = hUser.authUser("Welcom Home_Music.", args.uID)
 
     if not userInfo == None:
+        hMusic = HandleMusic(dbInfo=dbInfo, dbName=DB_NAME, tbName=args.uID)
+        hRank = HandleRank(WEB_DRIVER_PHATH)
+
         musicHome = pathlib.PurePath(
             MUSIC_HOME_BASE).joinpath(userInfo['loginID'])
 
@@ -877,7 +996,10 @@ if __name__ == "__main__":
             hMusic.syncMusicDBtoDir(musicHome)
 
         if(args.musicsList):
+            hMusic.syncMusicDBtoDir(musicHome)
+
             musicInfos = hMusic.mkMusicInfo(args.musicsList)
+            hRank.updateRank(musicInfos)
             hMusic.addMusics(musicInfos, musicHome)
 
         if(args.operation == "add"):
@@ -905,6 +1027,9 @@ if __name__ == "__main__":
             else:
                 print("Only admin can remove user account.")
 
-        # if (args.rank):
-        #     logger.debug("update rank based on melon top 100 chart")
-        #     updateRank(dbCon, DB_NAME, userInfo['uid'], PHANTOMJS_PATH)
+        if (args.rank):
+            logger.debug("update current rank -----")
+
+            musicInfos = hMusic.getMusicInfos()
+            hRank.updateRank(musicInfos)
+            hMusic.updateMusicInfos(musicInfos)
