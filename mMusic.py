@@ -586,6 +586,7 @@ class HandleMusicTag:
 
             fstem = pathlib.PurePath(fName).stem
             tag = id3.ID3(fName)
+            logger.info("Getting Tag of {fn}".format(fn=fName))
 
             if not 'TIT2' in tag.keys():
                 tag.add(id3.TIT2(encoding=3, text=fstem))
@@ -613,6 +614,11 @@ class HandleMusicTag:
             return None
 
     def _tagParsing(self, key, value, fName):
+        def conv(uni):
+            try:
+                return uni.encode('iso-8859-1').decode('cp949')
+            except (UnicodeError, LookupError):
+                return uni
 
         fParent = pathlib.PurePath(fName).parent
         fStem = pathlib.PurePath(fName).stem
@@ -629,8 +635,7 @@ class HandleMusicTag:
             return str(lyrPath)
         else:
             # tilte TIT2, artist TPE1, album TALB, genre TCON
-            return value.text[0]
-
+            return conv(value.text[0])
 
 class HandleFile:
     def __init__(self):
@@ -1019,7 +1024,7 @@ if __name__ == "__main__":
             hMusic.syncMusicDBtoDir(musicHome)
 
             musicInfos = hMusic.mkMusicInfo(args.musicsList)
-            hRank.updateRank(musicInfos)
+            # hRank.updateRank(musicInfos)
             hMusic.addMusics(musicInfos, musicHome)
 
         if(args.operation == "add"):
