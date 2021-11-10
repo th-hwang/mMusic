@@ -586,7 +586,7 @@ class HandleMusicTag:
 
             fstem = pathlib.PurePath(fName).stem
             tag = id3.ID3(fName)
-            logger.info("Getting Tag of {fn}".format(fn=fName))
+            # logger.info("Getting Tag of {fn}".format(fn=fName))
 
             if not 'TIT2' in tag.keys():
                 tag.add(id3.TIT2(encoding=3, text=fstem))
@@ -636,6 +636,7 @@ class HandleMusicTag:
         else:
             # tilte TIT2, artist TPE1, album TALB, genre TCON
             return conv(value.text[0])
+
 
 class HandleFile:
     def __init__(self):
@@ -696,6 +697,14 @@ class HandleFile:
         except Exception as e:
             logger.debug(
                 "[ERROR] %s. Error in mvFile [%s] to [%s] ", e, src, tgt)
+            raise
+
+    def rmFile(self, fName):
+        try:
+            pathlib.Path(fName).unlink()
+        except Exception as e:
+            logger.debug(
+                "[ERROR] %s. Error in rmFile [%s]", e, fName)
             raise
 
 
@@ -806,6 +815,12 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
             if self.isExistMusicArtistTitle(artist=musicInfo['artist'], title=musicInfo['title']):
                 logger.info("[Skip] {fn} already exists ................. [Skip]".format(
                     fn=musicInfo['title']))
+
+                if 'imgname' in musicInfo.keys():
+                    self.rmFile(musicInfo['imgname'])
+
+                if 'lyricname' in musicInfo.keys():
+                    self.rmFile(musicInfo['lyricname'])
             else:
                 logger.info("[Move] {fn} is moving to {dr} ............... [Ok]".format(
                     fn=musicInfo['title'], dr=musicHome))
