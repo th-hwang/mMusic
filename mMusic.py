@@ -551,12 +551,6 @@ class HandleMusicDB(HandleDB):
                 title, artist, self.tbName, self.dbName)
             return False
 
-    def _rmAllDeleteFlag(self):
-        logger.debug("Deleting music records having on delete-flag ")
-        sql = """Delete from {db}.{tb} where deleteflag=True""".format(
-            db=self.dbName, tb=self.tbName)
-        return True if self._sendQuery(sql, mode="DML") == None else False
-
 
 class HandleMusicTag:
 
@@ -794,8 +788,7 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
 
         for ff in self.mkFileList(musicDir):
 
-            tag = self.getTagArtistTitle(ff)
-            if not tag == None:
+            if not (tag := self.getTagArtistTitle(ff)) == None:
                 self._unsetDeleteFlagArtistTitle(
                     artist=tag['artist'], title=tag['title'])
                 self._increaseFavorArtistTitle(
@@ -845,6 +838,28 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         self.mvFile(srcFilePath, tgtFilePath)
 
         return str(tgtFilePath)
+
+    def _rmAllDeleteFlag(self):
+        logger.debug(
+            "Deleting cover image, lyric and music recordshaving on delete-flag ")
+        # sql = """Delete from {db}.{tb} where deleteflag=True""".format(
+        #     db=self.dbName, tb=self.tbName)
+
+        musicInfos = self.getMusicInfos({'deleteflag': True})
+
+        for musicInfo in musicInfos:
+            logger.info("[Delete] {fn} is deleted ............... [Ok]".format(
+                fn=musicInfo['title']))
+            if not (fName := musicInfo['imgname']) == None:
+                self.rmFile(fName)
+            if not (fName := musicInfo['lyricname']) == None:
+                self.rmFile(fName)
+            self.rmMusicInfoArtistTitle(
+                artist=musicInfo['artist'], title=musicInfo['title'])
+
+        return None
+
+        # return True if self._sendQuery(sql, mode="DML") == None else False
 
 
 class HandleRank():
