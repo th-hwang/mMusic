@@ -20,7 +20,6 @@ from bs4 import BeautifulSoup
 
 
 class HandleDB:
-
     def __init__(self, dbInfo={}):
         logger.debug("Initializing HandleDB Class with dbInfo [%s]", dbInfo)
         super(HandleDB, self).__init__()
@@ -35,26 +34,24 @@ class HandleDB:
             logger.debug("Connecting to the database sever")
             try:
                 self.dbCon = MySQLdb.connect(
-                    host=dbInfo['dbHost'], user=dbInfo['dbUser'], passwd=dbInfo['dbPasswd'], charset='utf8')
+                    host=dbInfo["dbHost"], user=dbInfo["dbUser"], passwd=dbInfo["dbPasswd"], charset="utf8"
+                )
                 logger.debug("Success to connect to the database sever")
             except Exception as e:
-                logger.debug(
-                    "[Error] Fail to connect to the database sever. Error message : %s.", e)
+                logger.debug("[Error] Fail to connect to the database sever. Error message : %s.", e)
                 raise
         else:
-            logger.debug(
-                "Insufficient dbInfo [%s]. Fill dbInfo and use connectDB()", dbInfo)
+            logger.debug("Insufficient dbInfo [%s]. Fill dbInfo and use connectDB()", dbInfo)
 
     def closeDB(self):
 
-        if 'dbCon' in dir(self):
+        if "dbCon" in dir(self):
             logger.debug("Closing DB Connection ")
             self.dbCon.close()
-            del(self.dbCon)
+            del self.dbCon
 
     def _sendQuery(self, SQL, data={}, mode=""):
-        logger.debug(
-            "_sendQuery with SQL = [%s] and data = [%s]", SQL, data)
+        logger.debug("_sendQuery with SQL = [%s] and data = [%s]", SQL, data)
 
         try:
             cursor = self.dbCon.cursor()
@@ -65,81 +62,75 @@ class HandleDB:
             # data 인자가 1개일 경우 tuple ("1",) 로 써야함. (1) -> 1, (1,) -> (1,) 로 인식함.
             cursor.execute(SQL, data)
 
-            if (mode == "DML"):
+            if mode == "DML":
                 # dml = data manupulation language, should be commited to change data
                 return self.dbCon.commit()
             else:
                 return cursor.fetchall()
 
         except MySQLdb.Error as e:
-            logger.debug(
-                "[ERROR] Error in _sendQuery() with SQL = [%s] and data = [%s]", SQL, data)
-            logger.debug(
-                "[ERROR] Error in _sendQuery() with error messsage %s", e)
+            logger.debug("[ERROR] Error in _sendQuery() with SQL = [%s] and data = [%s]", SQL, data)
+            logger.debug("[ERROR] Error in _sendQuery() with error messsage %s", e)
 
-            if (mode == "DML"):
+            if mode == "DML":
                 self.dbCon.rollback()
                 return False
         finally:
             cursor.close()
 
     def _escStr(self, s):
-        return self.dbCon.escape_string(s).decode('utf-8')
+        return self.dbCon.escape_string(s).decode("utf-8")
 
     def isExistDB(self, dbName):
-        logger.debug(
-            "Checking the existence of the database [%s]", self._escStr(dbName))
+        logger.debug("Checking the existence of the database [%s]", self._escStr(dbName))
 
         sql = """Show databases like '{db}';""".format(db=self._escStr(dbName))
 
         return len(self._sendQuery(sql)) > 0
 
     def setDB(self, dbName):
-        if not dbName == '':
+        if not dbName == "":
             self.dbName = self._escStr(dbName)
             self.makeDB(self.dbName)
         else:
-            logger.debug(
-                "[setDB] dbName is not defined. Define dbName and use setDB()")
+            logger.debug("[setDB] dbName is not defined. Define dbName and use setDB()")
 
     def makeDB(self, dbName):
-        if(not self.isExistDB(dbName)):
+        if not self.isExistDB(dbName):
             logger.debug("Cannot find the database [%s]", self._escStr(dbName))
             logger.debug("Creating the database [%s]", self._escStr(dbName))
 
-            sql = """CREATE DATABASE IF NOT EXISTS {db};""".format(
-                db=self._escStr(dbName))
+            sql = """CREATE DATABASE IF NOT EXISTS {db};""".format(db=self._escStr(dbName))
             return self._sendQuery(sql) != None
         else:
             logger.debug("The database [%s] exists", self._escStr(dbName))
             return False
 
     def deleteDB(self, dbName):
-        if(self.isExistDB(dbName)):
+        if self.isExistDB(dbName):
             logger.debug("Deleting the database [%s]", self._escStr(dbName))
 
-            sql = """DROP DATABASE IF EXISTS {db};""".format(
-                db=self._escStr(dbName))
+            sql = """DROP DATABASE IF EXISTS {db};""".format(db=self._escStr(dbName))
 
             return self._sendQuery(sql) != None
         else:
-            logger.debug(
-                "Cannot find the database [%s] and thus cannot delete it", self._escStr(dbName))
+            logger.debug("Cannot find the database [%s] and thus cannot delete it", self._escStr(dbName))
             return False
 
     def isExistTB(self, dbName, tbName):
 
-        if (self.isExistDB(dbName)):
+        if self.isExistDB(dbName):
             logger.debug(
-                "Checking the existence of the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
+                "Checking the existence of the user table [%s] in the database [%s]",
+                self._escStr(tbName),
+                self._escStr(dbName),
+            )
 
-            sql = """Show tables in {db} like '{tb}';""".format(
-                db=self._escStr(dbName), tb=self._escStr(tbName))
+            sql = """Show tables in {db} like '{tb}';""".format(db=self._escStr(dbName), tb=self._escStr(tbName))
 
             return len(self._sendQuery(sql)) > 0
         else:
-            logger.debug(
-                "There is no database [%s]", self.self._escStr(dbName))
+            logger.debug("There is no database [%s]", self._escStr(dbName))
             return False
 
     def makeTB(self):
@@ -147,16 +138,19 @@ class HandleDB:
         pass
 
     def deleteTB(self, dbName, tbName):
-        if(self.isExistTB(dbName, tbName)):
+        if self.isExistTB(dbName, tbName):
             logger.debug(
-                "Deleting the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName))
+                "Deleting the user table [%s] in the database [%s]", self._escStr(tbName), self._escStr(dbName)
+            )
 
-            sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(
-                db=self._escStr(dbName), tb=self._escStr(tbName))
+            sql = """DROP TABLE IF EXISTS {db}.{tb};""".format(db=self._escStr(dbName), tb=self._escStr(tbName))
             return self._sendQuery(sql) != None
         else:
             logger.debug(
-                "Cannot find the table [%s] in the database [%s] and thus cannot delete it", self._escStr(tbName), self._escStr(dbName))
+                "Cannot find the table [%s] in the database [%s] and thus cannot delete it",
+                self._escStr(tbName),
+                self._escStr(dbName),
+            )
             return False
 
     def _where(self, dic):
@@ -215,8 +209,7 @@ class HandleDB:
 
 
 class HandleUserDB(HandleDB):
-
-    def __init__(self, dbInfo={}, dbName='', tbName=''):
+    def __init__(self, dbInfo={}, dbName="", tbName=""):
         logger.debug("Initializing HandleUserDB Class")
         super(HandleUserDB, self).__init__(dbInfo)
 
@@ -228,23 +221,19 @@ class HandleUserDB(HandleDB):
         super(HandleUserDB, self).__del__()
 
     def setTable(self, tbName):
-        if 'dbName' in dir(self):
-            if not tbName == '':
+        if "dbName" in dir(self):
+            if not tbName == "":
                 self.tbName = self._escStr(tbName)
                 self.makeTB()
             else:
-                logger.debug(
-                    "[setTable] tbName is not defined. Define tbName first and use setTable()")
+                logger.debug("[setTable] tbName is not defined. Define tbName first and use setTable()")
         else:
-            logger.debug(
-                "[setTable] dbName is not defined. Define dbName first and use setDB()")
+            logger.debug("[setTable] dbName is not defined. Define dbName first and use setDB()")
 
     def makeTB(self):
-        if(not self.isExistTB(self.dbName, self.tbName)):
-            logger.debug(
-                "Cannot find the user table [%s] in the database [%s]", self.tbName, self.dbName)
-            logger.debug(
-                "Creating the user table [%s] in the database [%s]", self.tbName, self.dbName)
+        if not self.isExistTB(self.dbName, self.tbName):
+            logger.debug("Cannot find the user table [%s] in the database [%s]", self.tbName, self.dbName)
+            logger.debug("Creating the user table [%s] in the database [%s]", self.tbName, self.dbName)
 
             sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                     idUser 		int 		unsigned NOT NULL AUTO_INCREMENT,
@@ -253,111 +242,143 @@ class HandleUserDB(HandleDB):
                     privilege	boolean     DEFAULT false,
                     deleteflag	boolean     DEFAULT false,
                     PRIMARY KEY (idUser)
-                    ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
+                    ) DEFAULT CHARSET=utf8;""".format(
+                db=self.dbName, tb=self.tbName
+            )
 
             return self._sendQuery(sql) != None
         else:
-            logger.debug(
-                "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
+            logger.debug("The user table [%s] in database [%s] exists", self.tbName, self.dbName)
             return False
 
     def isExistUser(self, userInfo):
         logger.debug(
-            "Checking the existence of the user in the user table [%s] of the database [%s]", self.tbName, self.dbName)
+            "Checking the existence of the user in the user table [%s] of the database [%s]", self.tbName, self.dbName
+        )
 
         # need space between table name and where
-        sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + " " + self._where(userInfo)
+        sql = """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + " " + self._where(userInfo)
 
         return len(self._sendQuery(sql, userInfo)) > 0
 
     def isExistLoginID(self, loginID):
         logger.debug(
-            "Checking if the user ID [%s] exists in User_Table [%s] of the database [%s].", loginID, self.tbName, self.dbName)
+            "Checking if the user ID [%s] exists in User_Table [%s] of the database [%s].",
+            loginID,
+            self.tbName,
+            self.dbName,
+        )
 
-        return self.isExistUser({'loginID': loginID})
+        return self.isExistUser({"loginID": loginID})
 
     def isFirstUser(self):
-        logger.debug(
-            "Checking if you are the first user. The first user can have all privilege")
+        logger.debug("Checking if you are the first user. The first user can have all privilege")
 
         return not self.isExistUser({})
 
     def isAdminLogindID(self, loginID):
-        return self.getUserAccount(loginID)[0]['privilege']
+        return self.getUserAccount(loginID)[0]["privilege"]
 
     def addUserAccount(self, userInfo):
-        if (self.isExistLoginID(userInfo['loginID'])):
-            logger.debug("[Error] Your user ID [%s] exists in the user table [%s] of the database [%s]",
-                         userInfo['loginID'], self.tbName, self.dbName)
+        if self.isExistLoginID(userInfo["loginID"]):
+            logger.debug(
+                "[Error] Your user ID [%s] exists in the user table [%s] of the database [%s]",
+                userInfo["loginID"],
+                self.tbName,
+                self.dbName,
+            )
             return False
 
         else:
             logger.debug(
-                "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Adding userInfo [%s] to the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName
+            )
 
-            sql = """insert into {db}.{tb} """.format(
-                db=self.dbName, tb=self.tbName) + self._values(userInfo)
+            sql = """insert into {db}.{tb} """.format(db=self.dbName, tb=self.tbName) + self._values(userInfo)
 
             return True if self._sendQuery(sql, data=userInfo, mode="DML") == None else False
 
     def rmUserAccount(self, userInfo):
-        if (self.isExistUser(userInfo)):
+        if self.isExistUser(userInfo):
             logger.debug(
-                "Removing the user info in DB of user info [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Removing the user info in DB of user info [%s] from the user table [%s] in the database [%s]",
+                userInfo,
+                self.tbName,
+                self.dbName,
+            )
 
-            sql = """delete from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where(userInfo)
+            sql = """delete from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._where(userInfo)
 
             return True if self._sendQuery(sql, data=userInfo, mode="DML") == None else False
         else:
-            logger.debug("[ERROR] Your user info [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be deleted",
-                         userInfo, self.tbName, self.dbName)
+            logger.debug(
+                "[ERROR] Your user info [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be deleted",
+                userInfo,
+                self.tbName,
+                self.dbName,
+            )
             return False
 
     def rmUserAccountLoginID(self, loginID):
-        return self.rmUserAccount(userInfo={'loginID': loginID})
+        return self.rmUserAccount(userInfo={"loginID": loginID})
 
     def getUserAccount(self, userInfo):
-        if (self.isExistUser(userInfo)):
+        if self.isExistUser(userInfo):
             logger.debug(
-                "Getting the user info records having user info [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
-            sql = """select * from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where(userInfo)
+                "Getting the user info records having user info [%s] from the user table [%s] in the database [%s]",
+                userInfo,
+                self.tbName,
+                self.dbName,
+            )
+            sql = """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._where(userInfo)
 
             rlt = self._sendQuery(sql, data=userInfo)
-            if not rlt == None:
-                return {'loginID': rlt[0][1], 'passwd': rlt[0][2], 'privilege': rlt[0][3]}
+            if rlt:
+                return {"loginID": rlt[0][1], "passwd": rlt[0][2], "privilege": rlt[0][3]}
             else:
                 logger.debug("Cannot find the user account [%s]", userInfo)
                 return None
         else:
-            logger.debug("[ERROR] Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot get account info",
-                         userInfo, self.tbName, self.dbName)
+            logger.debug(
+                "[ERROR] Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot get account info",
+                userInfo,
+                self.tbName,
+                self.dbName,
+            )
         return None
 
     def getUserAccountLoginID(self, loginID):
-        return self.getUserAccount(userInfo={'loginID': loginID})
+        return self.getUserAccount(userInfo={"loginID": loginID})
 
     def updateUserAccount(self, userInfo):
 
-        if (self.isExistLoginID(userInfo['loginID'])):
+        if self.isExistLoginID(userInfo["loginID"]):
             logger.debug(
-                "Updating the userInfo [%s] from the user table [%s] in the database [%s]", userInfo, self.tbName, self.dbName)
+                "Updating the userInfo [%s] from the user table [%s] in the database [%s]",
+                userInfo,
+                self.tbName,
+                self.dbName,
+            )
 
-            sql = """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._set(
-                userInfo) + self._where({'loginID': userInfo['loginID']})
+            sql = (
+                """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName)
+                + self._set(userInfo)
+                + self._where({"loginID": userInfo["loginID"]})
+            )
 
             return True if self._sendQuery(sql, data=userInfo, mode="DML") == None else False
         else:
-            logger.debug("[ERROR] Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
-                         userInfo['loginID'], self.tbName, self.dbName)
+            logger.debug(
+                "[ERROR] Your user ID [%s] doesnot exist in the user table [%s] of the database [%s] and thus cannot be updated",
+                userInfo["loginID"],
+                self.tbName,
+                self.dbName,
+            )
             return False
 
 
 class HandleMusicDB(HandleDB):
-
-    def __init__(self, dbInfo={}, dbName='', tbName=''):
+    def __init__(self, dbInfo={}, dbName="", tbName=""):
         logger.debug("Initializing HandleMusicDB Class")
         super(HandleMusicDB, self).__init__(dbInfo)
 
@@ -369,23 +390,19 @@ class HandleMusicDB(HandleDB):
         super(HandleMusicDB, self).__del__()
 
     def setTable(self, tbName):
-        if 'dbName' in dir(self):
-            if not tbName == '':
+        if "dbName" in dir(self):
+            if not tbName == "":
                 self.tbName = self._escStr(tbName)
                 self.makeTB()
             else:
-                logger.debug(
-                    "[setTable] tbName is not defined. Define tbName first and use setTable()")
+                logger.debug("[setTable] tbName is not defined. Define tbName first and use setTable()")
         else:
-            logger.debug(
-                "[setTable] dbName is not defined. Define dbName first and use setDB()")
+            logger.debug("[setTable] dbName is not defined. Define dbName first and use setDB()")
 
     def makeTB(self):
-        if(not self.isExistTB(self.dbName, self.tbName)):
-            logger.debug(
-                "Cannot find the music table [%s] in the database [%s]", self.tbName, self.dbName)
-            logger.debug(
-                "Creating the music table [%s] in the database [%s]", self.tbName, self.dbName)
+        if not self.isExistTB(self.dbName, self.tbName):
+            logger.debug("Cannot find the music table [%s] in the database [%s]", self.tbName, self.dbName)
+            logger.debug("Creating the music table [%s] in the database [%s]", self.tbName, self.dbName)
 
             sql = """CREATE TABLE IF NOT EXISTS {db}.{tb} (
                     idmusic 		int 		unsigned NOT NULL AUTO_INCREMENT,
@@ -401,73 +418,100 @@ class HandleMusicDB(HandleDB):
                     favor		int		unsigned,
                     deleteflag	int		unsigned,
                     PRIMARY KEY (idmusic)
-                    ) DEFAULT CHARSET=utf8;""".format(db=self.dbName, tb=self.tbName)
+                    ) DEFAULT CHARSET=utf8;""".format(
+                db=self.dbName, tb=self.tbName
+            )
 
             return self._sendQuery(sql) != None
         else:
-            logger.debug(
-                "The user table [%s] in database [%s] exists", self.tbName, self.dbName)
+            logger.debug("The user table [%s] in database [%s] exists", self.tbName, self.dbName)
             return False
 
     def isExistMusic(self, musicInfo):
         logger.debug(
             "Checking the existence of the music [%s] in the music table [%s] of the database [%s]",
-            musicInfo, self.tbName, self.dbName)
+            musicInfo,
+            self.tbName,
+            self.dbName,
+        )
 
         # need space between table name and where
-        sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + " " + self._where(musicInfo)
+        sql = """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + " " + self._where(musicInfo)
 
         return len(self._sendQuery(sql, musicInfo)) > 0
 
     def isExistMusicArtistTitle(self, artist, title):
         logger.debug(
             "Checking if the music info record having title [%s] and artist [%s] exists in music table [%s] of database [%s].",
-            title, artist, self.tbName, self.dbName)
+            title,
+            artist,
+            self.tbName,
+            self.dbName,
+        )
 
-        return self.isExistMusic({'title': title, 'artist': artist})
+        return self.isExistMusic({"title": title, "artist": artist})
 
     def addMusicInfos(self, musicInfos):
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
-            if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
-                logger.debug("[ERROR] The music info record having title [%s] and artist [%s] exists in the music table [%s] of the database [%s] and thus cannot be added",
-                             musicInfo['title'], musicInfo['artist'], self.tbName, self.dbName)
+            if self.isExistMusicArtistTitle(musicInfo["artist"], musicInfo["title"]):
+                logger.debug(
+                    "[ERROR] The music info record having title [%s] and artist [%s] exists in the music table [%s] of the database [%s] and thus cannot be added",
+                    musicInfo["title"],
+                    musicInfo["artist"],
+                    self.tbName,
+                    self.dbName,
+                )
                 continue
 
             else:
                 logger.debug(
-                    "Adding the music info record [%s] to the music table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+                    "Adding the music info record [%s] to the music table [%s] in the database [%s]",
+                    musicInfo,
+                    self.tbName,
+                    self.dbName,
+                )
 
-                sql = """insert into {db}.{tb} """.format(
-                    db=self.dbName, tb=self.tbName) + self._values(musicInfo)
+                sql = """insert into {db}.{tb} """.format(db=self.dbName, tb=self.tbName) + self._values(musicInfo)
 
                 self._sendQuery(sql, data=musicInfo, mode="DML")
 
     def rmMusicInfoArtistTitle(self, artist, title):
-        if (self.isExistMusicArtistTitle(artist, title)):
+        if self.isExistMusicArtistTitle(artist, title):
             logger.debug(
                 "Removing the muisc info record having title [%s] and artist [%s] from the music table [%s] in the database [%s]",
-                title, artist, self.tbName, self.dbName)
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
 
-            sql = """delete from {db}.{tb}""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
+            sql = """delete from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._where(
+                {"title": title, "artist": artist}
+            )
 
-            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}, mode="DML") == None else False
+            return True if self._sendQuery(sql, data={"title": title, "artist": artist}, mode="DML") == None else False
         else:
             logger.debug(
                 "[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be deleted",
-                title, artist, self.tbName, self.dbName)
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
             return False
 
     def getMusicInfoArtistTitle(self, artist, title):
-        return self.getMusicInfos(musicInfo={'title': title, 'artist': artist})
+        return self.getMusicInfos(musicInfo={"title": title, "artist": artist})
 
     def getMusicInfos(self, musicInfo={}):
         logger.debug(
-            "Getting the music info records having musicInfo [%s] from the user table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+            "Getting the music info records having musicInfo [%s] from the user table [%s] in the database [%s]",
+            musicInfo,
+            self.tbName,
+            self.dbName,
+        )
 
-        sql = """select * from {db}.{tb}""".format(
-            db=self.dbName, tb=self.tbName) + self._where(musicInfo)
+        sql = """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._where(musicInfo)
 
         rlt = self._sendQuery(sql, data=musicInfo)
 
@@ -475,12 +519,23 @@ class HandleMusicDB(HandleDB):
             result = []
             for v in rlt:
                 result.append(
-                    {'title': v[1], 'artist': v[2], 'album': v[3], 'sdate': v[4], 'genre': v[5], 'filename': v[6], 'imgname': v[7],
-                     'lyricname': v[8], 'currentrank': v[9], 'favor': v[10], 'deleteflag': v[11]})
+                    {
+                        "title": v[1],
+                        "artist": v[2],
+                        "album": v[3],
+                        "sdate": v[4],
+                        "genre": v[5],
+                        "filename": v[6],
+                        "imgname": v[7],
+                        "lyricname": v[8],
+                        "currentrank": v[9],
+                        "favor": v[10],
+                        "deleteflag": v[11],
+                    }
+                )
             return result
         else:
-            logger.debug(
-                "Cannot find the music info record having musicInfo [%s]", musicInfo)
+            logger.debug("Cannot find the music info record having musicInfo [%s]", musicInfo)
             return None
 
     def updateMusicInfos(self, musicInfos):
@@ -490,81 +545,126 @@ class HandleMusicDB(HandleDB):
                 return None
 
     def _updateMusicInfo(self, musicInfo):
-        if (self.isExistMusicArtistTitle(musicInfo['artist'], musicInfo['title'])):
+        if self.isExistMusicArtistTitle(musicInfo["artist"], musicInfo["title"]):
             logger.debug(
-                "Updating the music info record [%s] from the user table [%s] in the database [%s]", musicInfo, self.tbName, self.dbName)
+                "Updating the music info record [%s] from the user table [%s] in the database [%s]",
+                musicInfo,
+                self.tbName,
+                self.dbName,
+            )
 
-            sql = """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + self._set(
-                musicInfo) + self._where({'title': musicInfo['title'], 'artist': musicInfo['artist']})
+            sql = (
+                """update {db}.{tb}""".format(db=self.dbName, tb=self.tbName)
+                + self._set(musicInfo)
+                + self._where({"title": musicInfo["title"], "artist": musicInfo["artist"]})
+            )
 
             return True if self._sendQuery(sql, data=musicInfo, mode="DML") == None else False
         else:
-            logger.debug("[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be updated",
-                         musicInfo['artist'], musicInfo['title'], self.tbName, self.dbName)
+            logger.debug(
+                "[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot be updated",
+                musicInfo["artist"],
+                musicInfo["title"],
+                self.tbName,
+                self.dbName,
+            )
             return False
 
     def _setAllDeleteFlag(self):
         logger.debug("Setting delete-flag of all music to on")
-        sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(
-            db=self.dbName, tb=self.tbName)
+        sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(db=self.dbName, tb=self.tbName)
         return True if self._sendQuery(sql, mode="DML") == None else False
 
     def _setDeleteFlagArtistTitle(self, artist, title):
-        if (self.isExistMusicArtistTitle(artist, title)):
+        if self.isExistMusicArtistTitle(artist, title):
             logger.debug(
                 "Setting the delete flag of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]",
-                title, artist, self.tbName, self.dbName)
-            sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
-            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
+            sql = """UPDATE {db}.{tb} SET deleteflag=True""".format(db=self.dbName, tb=self.tbName) + self._where(
+                {"title": title, "artist": artist}
+            )
+            return True if self._sendQuery(sql, data={"title": title, "artist": artist}) == None else False
         else:
             logger.debug(
                 "[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot set deleteflag",
-                title, artist, self.tbName, self.dbName)
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
             return False
 
     def _unsetDeleteFlagArtistTitle(self, artist, title):
-        if (self.isExistMusicArtistTitle(artist, title)):
+        if self.isExistMusicArtistTitle(artist, title):
             logger.debug(
                 "Unsetting the delete flag of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]",
-                title, artist, self.tbName, self.dbName)
-            sql = """UPDATE {db}.{tb} SET deleteflag=False""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
-            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
+            sql = """UPDATE {db}.{tb} SET deleteflag=False""".format(db=self.dbName, tb=self.tbName) + self._where(
+                {"title": title, "artist": artist}
+            )
+            return True if self._sendQuery(sql, data={"title": title, "artist": artist}) == None else False
         else:
             logger.debug(
                 "[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot unset deleteflag",
-                title, artist, self.tbName, self.dbName)
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
             return False
 
     def _increaseFavorArtistTitle(self, artist, title):
-        if (self.isExistMusicArtistTitle(artist, title)):
+        if self.isExistMusicArtistTitle(artist, title):
             logger.debug(
                 "Increasing the favor of music  title [%s] and artist [%s] from the music table [%s] in the database [%s]",
-                title, artist, self.tbName, self.dbName)
-            sql = """UPDATE {db}.{tb} SET favor=favor+1""".format(
-                db=self.dbName, tb=self.tbName) + self._where({'title': title, 'artist': artist})
-            return True if self._sendQuery(sql, data={'title': title, 'artist': artist}) == None else False
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
+            sql = """UPDATE {db}.{tb} SET favor=favor+1""".format(db=self.dbName, tb=self.tbName) + self._where(
+                {"title": title, "artist": artist}
+            )
+            return True if self._sendQuery(sql, data={"title": title, "artist": artist}) == None else False
         else:
             logger.debug(
                 "[ERROR] The music info record having title [%s] and artist [%s] doesnot exist in the music table [%s] of the database [%s] and thus cannot increase favor",
-                title, artist, self.tbName, self.dbName)
+                title,
+                artist,
+                self.tbName,
+                self.dbName,
+            )
             return False
 
 
 class HandleMusicTag:
-
     def __init__(self):
         logger.debug("Initializing HandleMusicTag Class")
         super(HandleMusicTag, self).__init__()
-        self.id3Frames = {'title': 'TIT2', 'artist': 'TPE1', 'album': 'TALB', 'sdate': 'TDRC',
-                          'genre': 'TCON', 'filename': 'PATH', 'imgname': 'APIC', 'lyricname': 'USLT'}
+        self.id3Frames = {
+            "title": "TIT2",
+            "artist": "TPE1",
+            "album": "TALB",
+            "sdate": "TDRC",
+            "genre": "TCON",
+            "filename": "PATH",
+            "imgname": "APIC",
+            "lyricname": "USLT",
+        }
 
     def __del__(self):
         logger.debug("Deleting HandleMusicTag Class")
 
     def getTagArtistTitle(self, fName):
-        return self.getTag(fName, id3Frames={'title': 'TIT2', 'artist': 'TPE1'})
+        return self.getTag(fName, id3Frames={"title": "TIT2", "artist": "TPE1"})
 
     def getTag(self, fName, id3Frames={}):
         # All strings are unicode in python3. we don't need to decode string anymore.
@@ -582,11 +682,11 @@ class HandleMusicTag:
             tag = id3.ID3(fName)
             # logger.info("Getting Tag of {fn}".format(fn=fName))
 
-            if not 'TIT2' in tag.keys():
+            if not "TIT2" in tag.keys():
                 tag.add(id3.TIT2(encoding=3, text=fstem))
                 tag.save()
 
-            if not 'TPE1' in tag.keys():
+            if not "TPE1" in tag.keys():
                 tag.add(id3.TPE1(encoding=3, text=fstem))
                 tag.save()
 
@@ -603,28 +703,27 @@ class HandleMusicTag:
 
         except Exception as e:
             # If file has no id3 head, ruturn None
-            logger.debug(
-                "%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
+            logger.debug("%s. Error occured during loading tag of [%s]. It may be not music file", e, fName)
             return None
 
     def _tagParsing(self, key, value, fName):
         def conv(uni):
             try:
-                return uni.encode('iso-8859-1').decode('cp949')
+                return uni.encode("iso-8859-1").decode("cp949")
             except (UnicodeError, LookupError):
                 return uni
 
         fParent = pathlib.PurePath(fName).parent
         fStem = pathlib.PurePath(fName).stem
 
-        if key == 'APIC':
+        if key == "APIC":
             # save album image and return tmporary filename
-            imgPath = fParent.joinpath('CoverImg_' + fStem + '.jpg')
+            imgPath = fParent.joinpath("CoverImg_" + fStem + ".jpg")
             HandleFile().svFile(imgPath, value.data, binMode=True)
             return str(imgPath)
-        elif key == 'USLT':
+        elif key == "USLT":
             # save lyric and return tmporary filename
-            lyrPath = fParent.joinpath('Lyric_' + fStem + '.txt')
+            lyrPath = fParent.joinpath("Lyric_" + fStem + ".txt")
             HandleFile().svFile(lyrPath, value.text, binMode=False)
             return str(lyrPath)
         else:
@@ -668,7 +767,7 @@ class HandleFile:
         result = []
         for ff in directory if type(directory) is list else [directory]:
             hPath = pathlib.Path(ff)
-            if(hPath.is_dir()):
+            if hPath.is_dir():
                 logger.info("%s is directory. Walk into the directory " % ff)
                 [result.append(str(x)) for x in walk(ff)]
             else:
@@ -689,23 +788,20 @@ class HandleFile:
         try:
             pathlib.Path(src).rename(tgt)
         except Exception as e:
-            logger.debug(
-                "[ERROR] %s. Error in mvFile [%s] to [%s] ", e, src, tgt)
+            logger.debug("[ERROR] %s. Error in mvFile [%s] to [%s] ", e, src, tgt)
             raise
 
     def rmFile(self, fName):
         try:
             pathlib.Path(fName).unlink()
         except Exception as e:
-            logger.debug(
-                "[ERROR] %s. Error in rmFile [%s]", e, fName)
+            logger.debug("[ERROR] %s. Error in rmFile [%s]", e, fName)
             raise
 
 
-class HandleUser (HandleUserDB, HandleFile):
-    def __init__(self, dbInfo={}, dbName='', tbName=''):
-        logger.debug(
-            "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
+class HandleUser(HandleUserDB, HandleFile):
+    def __init__(self, dbInfo={}, dbName="", tbName=""):
+        logger.debug("Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
         super(HandleUser, self).__init__(dbInfo, dbName, tbName)
 
     def __del__(self):
@@ -716,33 +812,33 @@ class HandleUser (HandleUserDB, HandleFile):
         #  id 와 passwd를 받아서 user table의 값과 비교하여 맞으면 userInfo를 리턴함, user가 없으면 None 리턴함.
         userInfo = self.getUserInfo(msg, uID)  # from user
 
-        if not userInfo == None:
+        if userInfo:
 
             if self.isFirstUser():
-                print("{uid} is the first one. All privilege is allowed.".format(
-                    uid=userInfo['loginID']))
-                userInfo['privilege'] = True
+                print("{uid} is the first one. All privilege is allowed.".format(uid=userInfo["loginID"]))
+                userInfo["privilege"] = True
                 self.addUserAccount(userInfo)
 
-            return self.getUserAccount(userInfo)
-        else:
-            print("login ID or password is wrong. check and try agian.")
-            return None
+            if rlt := self.getUserAccount(userInfo):
+                return rlt
+
+        print("login ID or password is wrong. check and try agian.")
+        return None
 
     def getUserInfo(self, msg="", loginID=""):
 
-        if (msg != ""):
+        if msg != "":
             print(msg)
 
         for num in range(3):
-            if (loginID == ""):
+            if loginID == "":
                 loginID = input("login ID: ")
 
             passwd1 = getpass.getpass(loginID + "'s password: ")
             if not passwd1 == "":
                 passwd2 = getpass.getpass("retype your password: ")
-                if (passwd1 == passwd2):
-                    return {'loginID': loginID, 'passwd': self._sha256(passwd1)}
+                if passwd1 == passwd2:
+                    return {"loginID": loginID, "passwd": self._sha256(passwd1)}
                 else:
                     print("The current password don't match with the previous password")
             else:
@@ -750,13 +846,12 @@ class HandleUser (HandleUserDB, HandleFile):
         return None
 
     def _sha256(self, str):
-        return hashlib.sha256(str.encode('utf8')).hexdigest()
+        return hashlib.sha256(str.encode("utf8")).hexdigest()
 
 
 class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
-    def __init__(self, dbInfo={}, dbName='', tbName=''):
-        logger.debug(
-            "Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
+    def __init__(self, dbInfo={}, dbName="", tbName=""):
+        logger.debug("Initializing HandleMusic Class with dbInfo [%s], dbName [%s], tbName[%s]", dbInfo, dbName, tbName)
         super(HandleMusic, self).__init__(dbInfo, dbName, tbName)
 
     def __del__(self):
@@ -771,63 +866,60 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         for ff in self.mkFileList(fileList):
             tmpDic = self.getTag(ff)
             if not tmpDic == None:
-                tmpDic['filename'] = ff
-                tmpDic['currentrank'] = 9999
-                tmpDic['favor'] = 0
-                tmpDic['deleteflag'] = False
+                tmpDic["filename"] = ff
+                tmpDic["currentrank"] = 9999
+                tmpDic["favor"] = 0
+                tmpDic["deleteflag"] = False
                 result.append(tmpDic)
 
         return result
 
     def syncMusicDBtoDir(self, musicDir):
         # music directory에 없는 것은 DB에서 삭제하고, 있는 것들은 favor +1
-        logger.info(
-            "Syncing Music Database to the music dir [%s] .....", musicDir)
+        logger.info("Syncing Music Database to the music dir [%s] .....", musicDir)
 
         self._setAllDeleteFlag()
 
         for ff in self.mkFileList(musicDir):
 
             if not (tag := self.getTagArtistTitle(ff)) == None:
-                self._unsetDeleteFlagArtistTitle(
-                    artist=tag['artist'], title=tag['title'])
-                self._increaseFavorArtistTitle(
-                    artist=tag['artist'], title=tag['title'])
+                self._unsetDeleteFlagArtistTitle(artist=tag["artist"], title=tag["title"])
+                self._increaseFavorArtistTitle(artist=tag["artist"], title=tag["title"])
 
         return self._rmAllDeleteFlag()
 
     def addMusics(self, musicInfos, musicHome):
-        logger.info(
-            "Adding Music files to the music home dir [%s] .....", musicHome)
+        logger.info("Adding Music files to the music home dir [%s] .....", musicHome)
         self.insertMusics(musicInfos, musicHome)
 
     def insertMusics(self, musicInfos, musicHome):
         logger.info("Inserting music information into database .....")
 
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
-            if self.isExistMusicArtistTitle(artist=musicInfo['artist'], title=musicInfo['title']):
-                logger.info("[Skip] {fn} already exists ................. [Skip]".format(
-                    fn=musicInfo['title']))
+            if self.isExistMusicArtistTitle(artist=musicInfo["artist"], title=musicInfo["title"]):
+                logger.info("[Skip] {fn} already exists ................. [Skip]".format(fn=musicInfo["title"]))
 
-                if 'imgname' in musicInfo.keys():
-                    self.rmFile(musicInfo['imgname'])
+                if "imgname" in musicInfo.keys():
+                    self.rmFile(musicInfo["imgname"])
 
-                if 'lyricname' in musicInfo.keys():
-                    self.rmFile(musicInfo['lyricname'])
+                if "lyricname" in musicInfo.keys():
+                    self.rmFile(musicInfo["lyricname"])
             else:
-                logger.info("[Move] {fn} is moving to {dr} ............... [Ok]".format(
-                    fn=musicInfo['title'], dr=musicHome))
+                logger.info(
+                    "[Move] {fn} is moving to {dr} ............... [Ok]".format(fn=musicInfo["title"], dr=musicHome)
+                )
 
-                musicInfo['filename'] = self._mvFileToMusicHome(
-                    musicInfo['filename'], musicHome)
+                musicInfo["filename"] = self._mvFileToMusicHome(musicInfo["filename"], musicHome)
 
-                if 'imgname' in musicInfo.keys():
-                    musicInfo['imgname'] = self._mvFileToMusicHome(
-                        musicInfo['imgname'], pathlib.PurePath(musicHome).joinpath("CoverImg"))
+                if "imgname" in musicInfo.keys():
+                    musicInfo["imgname"] = self._mvFileToMusicHome(
+                        musicInfo["imgname"], pathlib.PurePath(musicHome).joinpath("CoverImg")
+                    )
 
-                if 'lyricname' in musicInfo.keys():
-                    musicInfo['lyricname'] = self._mvFileToMusicHome(
-                        musicInfo['lyricname'], pathlib.PurePath(musicHome).joinpath("Lyric"))
+                if "lyricname" in musicInfo.keys():
+                    musicInfo["lyricname"] = self._mvFileToMusicHome(
+                        musicInfo["lyricname"], pathlib.PurePath(musicHome).joinpath("Lyric")
+                    )
 
                 self.addMusicInfos(musicInfo)
 
@@ -840,29 +932,26 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
         return str(tgtFilePath)
 
     def _rmAllDeleteFlag(self):
-        logger.debug(
-            "Deleting cover image, lyric and music recordshaving on delete-flag ")
+        logger.debug("Deleting cover image, lyric and music recordshaving on delete-flag ")
         # sql = """Delete from {db}.{tb} where deleteflag=True""".format(
         #     db=self.dbName, tb=self.tbName)
 
-        musicInfos = self.getMusicInfos({'deleteflag': True})
+        musicInfos = self.getMusicInfos({"deleteflag": True})
 
         for musicInfo in musicInfos:
-            logger.info("[Delete] {fn} is deleted ............... [Ok]".format(
-                fn=musicInfo['title']))
-            if not (fName := musicInfo['imgname']) == None:
+            logger.info("[Delete] {fn} is deleted ............... [Ok]".format(fn=musicInfo["title"]))
+            if not (fName := musicInfo["imgname"]) == None:
                 self.rmFile(fName)
-            if not (fName := musicInfo['lyricname']) == None:
+            if not (fName := musicInfo["lyricname"]) == None:
                 self.rmFile(fName)
-            self.rmMusicInfoArtistTitle(
-                artist=musicInfo['artist'], title=musicInfo['title'])
+            self.rmMusicInfoArtistTitle(artist=musicInfo["artist"], title=musicInfo["title"])
 
         return None
 
         # return True if self._sendQuery(sql, mode="DML") == None else False
 
 
-class HandleRank():
+class HandleRank:
     def __init__(self):
         pass
 
@@ -873,12 +962,13 @@ class HandleRank():
 
         logger.info("Crawling Melon Top 100 chart ..... ")
 
-        user_agent = ('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)'
-                      ' AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36')
-        headers = {'User-Agent': user_agent}
+        user_agent = (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6)"
+            " AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
+        )
+        headers = {"User-Agent": user_agent}
 
-        response = requests.get(
-            "http://www.melon.com/chart/index.htm", headers=headers)
+        response = requests.get("http://www.melon.com/chart/index.htm", headers=headers)
 
         soup = BeautifulSoup(response.content, "html.parser")
 
@@ -886,12 +976,14 @@ class HandleRank():
 
         result = []
 
-        for tName in ('lst50', 'lst100'):
+        for tName in ("lst50", "lst100"):
             for row in soup.find_all("tr", {"class": tName}):
-                tmp = {'rank': row.find("span", {"class": "rank"}).get_text(),
-                       'title': row.find("div", {"class": "ellipsis rank01"}).find("a").get_text(),
-                       'artist': row.find("div", {"class": "ellipsis rank02"}).find("a").get_text(),
-                       'album': row.find("div", {"class": "ellipsis rank03"}).find("a").get_text()}
+                tmp = {
+                    "rank": row.find("span", {"class": "rank"}).get_text(),
+                    "title": row.find("div", {"class": "ellipsis rank01"}).find("a").get_text(),
+                    "artist": row.find("div", {"class": "ellipsis rank02"}).find("a").get_text(),
+                    "album": row.find("div", {"class": "ellipsis rank03"}).find("a").get_text(),
+                }
                 result.append(tmp)
 
         return result
@@ -903,12 +995,11 @@ class HandleRank():
 
         for item in chartList if type(chartList) is list else [chartList]:
 
-            curMR = self.matchingRate(
-                musicInfo['title']+musicInfo['artist'], item['title']+item['artist'])
+            curMR = self.matchingRate(musicInfo["title"] + musicInfo["artist"], item["title"] + item["artist"])
 
             if curMR >= maxMR:
                 maxMR = curMR
-                rank = item['rank']
+                rank = item["rank"]
 
         return rank if maxMR > th else 999
 
@@ -919,12 +1010,12 @@ class HandleRank():
 
         for item in chartList if type(chartList) is list else [chartList]:
 
-            curDist = self.edit_distance(musicInfo['title'], item['title'])
-            curMR = float(curDist)/float(len(musicInfo['title']))
+            curDist = self.edit_distance(musicInfo["title"], item["title"])
+            curMR = float(curDist) / float(len(musicInfo["title"]))
 
             if curMR <= minMR:
                 minMR = curMR
-                rank = item['rank']
+                rank = item["rank"]
 
         return rank if minMR <= th else 999
 
@@ -934,51 +1025,51 @@ class HandleRank():
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
             rank = self.getRank(musicInfo, chartList)
             if not rank == None:
-                logger.info("[Melon TOP 100] : [{nR}] {fn}".format(
-                    nR=rank, fn=musicInfo['title']))
-                musicInfo['currentrank'] = rank
+                logger.info("[Melon TOP 100] : [{nR}] {fn}".format(nR=rank, fn=musicInfo["title"]))
+                musicInfo["currentrank"] = rank
 
     def matchingRate(self, src, ref):
-        logger.debug("Counting if each letter of src [{sc}] is in tgt [{rf}] and return the ratio of the count to total length of tgt".format(
-            sc=src, rf=ref))
+        logger.debug(
+            "Counting if each letter of src [{sc}] is in tgt [{rf}] and return the ratio of the count to total length of tgt".format(
+                sc=src, rf=ref
+            )
+        )
 
         cnt = 0
 
         for i in range(0, len(src)):
 
-            if src[i:i+1] in ref:
+            if src[i : i + 1] in ref:
                 cnt += 1
-                logger.debug("src[i:i+1]  - " + src[i:i+1] +
-                             " : True, Count : "+str(cnt)+"/"+str(len(src)))
+                logger.debug("src[i:i+1]  - " + src[i : i + 1] + " : True, Count : " + str(cnt) + "/" + str(len(src)))
             else:
-                logger.debug("src[i:i+1]  - " + src[i:i+1] +
-                             " : False, Count : "+str(cnt)+"/"+str(len(src)))
+                logger.debug("src[i:i+1]  - " + src[i : i + 1] + " : False, Count : " + str(cnt) + "/" + str(len(src)))
 
-        return float(cnt)/float(len(src))
+        return float(cnt) / float(len(src))
 
     # Levenstein Distance
     def edit_distance(sefl, s: str, t: str):
-        m = len(s)+1
-        n = len(t)+1
-        D = [[0]*m for _ in range(n)]
+        m = len(s) + 1
+        n = len(t) + 1
+        D = [[0] * m for _ in range(n)]
         D[0][0] = 0
 
         for i in range(1, m):
-            D[0][i] = D[0][i-1] + 1
+            D[0][i] = D[0][i - 1] + 1
 
         for j in range(1, n):
-            D[j][0] = D[j-1][0] + 1
+            D[j][0] = D[j - 1][0] + 1
 
         for i in range(1, n):
             for j in range(1, m):
                 cost = 0
 
-                if s[j-1] != t[i-1]:
+                if s[j - 1] != t[i - 1]:
                     cost = 1
 
-                D[i][j] = min(D[i][j-1] + 1, D[i-1][j] + 1, D[i-1][j-1] + cost)
+                D[i][j] = min(D[i][j - 1] + 1, D[i - 1][j] + 1, D[i - 1][j - 1] + cost)
 
-        return D[n-1][m-1]
+        return D[n - 1][m - 1]
 
 
 if __name__ == "__main__":
@@ -990,38 +1081,40 @@ if __name__ == "__main__":
     DB_NAME = "Home_Music"
     USER_TB_NAME = "User_Table"
     MUSIC_HOME_BASE = "/common/Musics/"
-    #MUSIC_HOME_BASE = "/Users/taehyunghwang/Music"
-    #WEB_DRIVER_PHATH = "/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/chromedriver"
+    # MUSIC_HOME_BASE = "/Users/taehyunghwang/Music"
+    # WEB_DRIVER_PHATH = "/Users/taehyunghwang/pyWorks/mMusic/.venv/bin/chromedriver"
     # rk3228 is 32bit ARM, there is no 32bit chrome
 
     # parsing argument
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-u", "--uID", required=True,
-                        metavar="userID", type=str, help="user id")
-    parser.add_argument("-s", "--musicsList", required=False,
-                        nargs="+",  help="music file or directory having them")
-    parser.add_argument("-o", "--operation", required=False,
-                        choices={'add', 'rm'}, help="add or remove user account")
-    parser.add_argument("-l", "--log", required=False,
-                        action="store_true", help="make log file in account directory")
-    parser.add_argument("-r", "--rank", required=False, action="store_true",
-                        help="update music rank based on melop top 100 chart")
-    parser.add_argument("-c", "--sync", required=False, action="store_true",
-                        help="update database based on music in the Music home directory")
+    parser.add_argument("-u", "--uID", required=True, metavar="userID", type=str, help="user id")
+    parser.add_argument("-s", "--musicsList", required=False, nargs="+", help="music file or directory having them")
+    parser.add_argument("-o", "--operation", required=False, choices={"add", "rm"}, help="add or remove user account")
+    parser.add_argument("-l", "--log", required=False, action="store_true", help="make log file in account directory")
+    parser.add_argument(
+        "-r", "--rank", required=False, action="store_true", help="update music rank based on melop top 100 chart"
+    )
+    parser.add_argument(
+        "-c",
+        "--sync",
+        required=False,
+        action="store_true",
+        help="update database based on music in the Music home directory",
+    )
 
     args = parser.parse_args()
 
     # setup logging
     logger = logging.getLogger(args.uID)
-    fomatter = logging.Formatter(
-        '[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s')
+    fomatter = logging.Formatter("[%(levelname)s|%(filename)s:%(lineno)s] %(asctime)s > %(message)s")
 
-    if (args.log):
+    if args.log:
         fPath = pathlib.PurePath(MUSIC_HOME_BASE).joinpath(args.uID)
         HandleFile().mkDir(fPath)
         fileHandler = logging.handlers.RotatingFileHandler(
-            fPath.joinpath(args.uID+".log"), maxBytes=1024*1024*10, backupCount=5)
+            fPath.joinpath(args.uID + ".log"), maxBytes=1024 * 1024 * 10, backupCount=5
+        )
         fileHandler.setFormatter(fomatter)
         logger.addHandler(fileHandler)
 
@@ -1034,47 +1127,46 @@ if __name__ == "__main__":
 
     # make class
     logger.debug("Making class .... ")
-    dbInfo = {'dbHost': DB_HOST, 'dbUser': DB_USER, 'dbPasswd': DB_PASSWD}
+    dbInfo = {"dbHost": DB_HOST, "dbUser": DB_USER, "dbPasswd": DB_PASSWD}
     hUser = HandleUser(dbInfo=dbInfo, dbName=DB_NAME, tbName=USER_TB_NAME)
 
     logger.debug("Handling argument")
     userInfo = hUser.authUser("Welcom Home_Music.", args.uID)
 
-    if not userInfo == None:
+    if userInfo:
         hMusic = HandleMusic(dbInfo=dbInfo, dbName=DB_NAME, tbName=args.uID)
         hRank = HandleRank()
 
-        musicHome = pathlib.PurePath(
-            MUSIC_HOME_BASE).joinpath(userInfo['loginID'])
+        musicHome = pathlib.PurePath(MUSIC_HOME_BASE).joinpath(userInfo["loginID"])
 
-        if (args.sync):
+        if args.sync:
             hMusic.syncMusicDBtoDir(musicHome)
 
-        if(args.musicsList):
+        if args.musicsList:
             hMusic.syncMusicDBtoDir(musicHome)
 
             musicInfos = hMusic.mkMusicInfo(args.musicsList)
             # hRank.updateRank(musicInfos)
             hMusic.addMusics(musicInfos, musicHome)
 
-        if(args.operation == "add"):
+        if args.operation == "add":
             logger.debug("Add user ----")
 
-            if userInfo['privilege']:
+            if userInfo["privilege"]:
                 newUserInfo = hUser.getUserInfo(
-                    "Creating new account. Type new login ID and password which will be used for new account.")
+                    "Creating new account. Type new login ID and password which will be used for new account."
+                )
                 hUser.addUserAccount(newUserInfo)
-                print(newUserInfo['loginID']+"'s account has been created.")
+                print(newUserInfo["loginID"] + "'s account has been created.")
             else:
                 print("Only admin can add user account.")
 
-        elif(args.operation == "rm"):
+        elif args.operation == "rm":
             logger.debug("remove user ----")
-            if userInfo['privilege']:
+            if userInfo["privilege"]:
                 print("Deleting account. Type logind ID which will be removed.")
                 delLoginID = input("login ID: ")
-                delPath = pathlib.PurePath(
-                    MUSIC_HOME_BASE).joinpath(delLoginID)
+                delPath = pathlib.PurePath(MUSIC_HOME_BASE).joinpath(delLoginID)
 
                 hUser.rmUserAccountLoginID(delLoginID)
                 hUser.rmDir(delPath)
@@ -1082,7 +1174,7 @@ if __name__ == "__main__":
             else:
                 print("Only admin can remove user account.")
 
-        if (args.rank):
+        if args.rank:
             logger.debug("update current rank -----")
 
             musicInfos = hMusic.getMusicInfos()
