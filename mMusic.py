@@ -5,6 +5,8 @@
 # ver 0.3 : support updating database based on music in the directory
 # ver 0.4 : [bug fix] change handling escape characters
 # ver 0.5 : change to python3 and make class
+# ver 0.51 : [bug fix] 사용자 암호 오류시 무언종료 수정
+# ver 0.52 : [bug fix] 동일한 노래를 중복 추가 내용 수정 (issue #4)
 
 import shutil
 import pathlib
@@ -17,6 +19,7 @@ import getpass
 import hashlib
 import requests
 from bs4 import BeautifulSoup
+import re
 
 
 class HandleDB:
@@ -153,18 +156,29 @@ class HandleDB:
             )
             return False
 
-    def _where(self, dic):
+    def _where(self, dic, exactMode=True):
+        # exactMode == True :
         # make [ where key1=%({key1})s and key2 = %({key2})s; ]
+        # https://dev.mysql.com/doc/connector-python/en/connector-python-example-cursor-transaction.html
         # 예) sql = """select * from {db}.{tb} where loginID = %(loginID)s and passwd= %(passwd)s and privilege=%(privilige)s"""
+
+        # exactMode == False :
+        # https://www.mysqltutorial.org/mysql-like/
+        # make [ where key1=%({key1})s and key2 = %({key2})s;
+        # 예) sql = """select * from {db}.{tb} where loginID like %(loginID)s and passwd like %(passwd)s and privilege like %(privilige)s"""
+
         if not len(dic) == 0:
             wh_Org = """ where """
             wh = wh_Org
+
+            em = " = " if exactMode else " like "
+
             for key, value in dic.items():
                 if not value == "":
                     if len(wh) > len(wh_Org):
                         wh = wh + " and "
 
-                    wh = wh + """{key}=%({key})s""".format(key=key)
+                    wh = wh + ("""{key}""" + em + """%({key})s""").format(key=key)
 
             return wh + ";" if len(wh) > len(wh_Org) else ";"
         else:
@@ -427,7 +441,7 @@ class HandleMusicDB(HandleDB):
             logger.debug("The user table [%s] in database [%s] exists", self.tbName, self.dbName)
             return False
 
-    def isExistMusic(self, musicInfo):
+    def isExistMusic(self, musicInfo, exactMode=True):
         logger.debug(
             "Checking the existence of the music [%s] in the music table [%s] of the database [%s]",
             musicInfo,
@@ -435,12 +449,18 @@ class HandleMusicDB(HandleDB):
             self.dbName,
         )
 
-        # need space between table name and where
-        sql = """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName) + " " + self._where(musicInfo)
+        sql = (
+            """select * from {db}.{tb}""".format(db=self.dbName, tb=self.tbName)
+            + " "
+            + self._where(musicInfo, exactMode)
+        )
 
         return len(self._sendQuery(sql, musicInfo)) > 0
 
-    def isExistMusicArtistTitle(self, artist, title):
+    def _simlify(self, tStr):
+        return re.sub(r" *\(.*\)", "", tStr)
+
+    def isExistMusicArtistTitle(self, artist, title, exactMode=True):
         logger.debug(
             "Checking if the music info record having title [%s] and artist [%s] exists in music table [%s] of database [%s].",
             title,
@@ -449,11 +469,18 @@ class HandleMusicDB(HandleDB):
             self.dbName,
         )
 
-        return self.isExistMusic({"title": title, "artist": artist})
+        if not exactMode:
+            # wildcard 가 필요한 경우, value에 포함되어야함.
+            # https://stackoverflow.com/questions/3134691/python-string-formats-with-sql-wildcards-and-like
+            exactMode = False
+            artist = "%" + self._simlify(artist) + "%"
+            title = "%" + self._simlify(title) + "%"
 
-    def addMusicInfos(self, musicInfos):
+        return self.isExistMusic({"title": title, "artist": artist}, exactMode)
+
+    def addMusicInfos(self, musicInfos, exactMode=True):
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
-            if self.isExistMusicArtistTitle(musicInfo["artist"], musicInfo["title"]):
+            if self.isExistMusicArtistTitle(musicInfo["artist"], musicInfo["title"], exactMode):
                 logger.debug(
                     "[ERROR] The music info record having title [%s] and artist [%s] exists in the music table [%s] of the database [%s] and thus cannot be added",
                     musicInfo["title"],
@@ -888,15 +915,15 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
 
         return self._rmAllDeleteFlag()
 
-    def addMusics(self, musicInfos, musicHome):
+    def addMusics(self, musicInfos, musicHome, exactMode):
         logger.info("Adding Music files to the music home dir [%s] .....", musicHome)
-        self.insertMusics(musicInfos, musicHome)
+        self.insertMusics(musicInfos, musicHome, exactMode)
 
-    def insertMusics(self, musicInfos, musicHome):
+    def insertMusics(self, musicInfos, musicHome, exactMode):
         logger.info("Inserting music information into database .....")
 
         for musicInfo in musicInfos if type(musicInfos) is list else [musicInfos]:
-            if self.isExistMusicArtistTitle(artist=musicInfo["artist"], title=musicInfo["title"]):
+            if self.isExistMusicArtistTitle(artist=musicInfo["artist"], title=musicInfo["title"], exactMode=exactMode):
                 logger.info("[Skip] {fn} already exists ................. [Skip]".format(fn=musicInfo["title"]))
 
                 if "imgname" in musicInfo.keys():
@@ -921,7 +948,7 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
                         musicInfo["lyricname"], pathlib.PurePath(musicHome).joinpath("Lyric")
                     )
 
-                self.addMusicInfos(musicInfo)
+                self.addMusicInfos(musicInfo, exactMode)
 
     def _mvFileToMusicHome(self, srcFilePath, tgtBasePath):
         fileName = pathlib.PurePath(srcFilePath).name
@@ -947,8 +974,6 @@ class HandleMusic(HandleMusicDB, HandleMusicTag, HandleFile):
             self.rmMusicInfoArtistTitle(artist=musicInfo["artist"], title=musicInfo["title"])
 
         return None
-
-        # return True if self._sendQuery(sql, mode="DML") == None else False
 
 
 class HandleRank:
@@ -1072,10 +1097,15 @@ class HandleRank:
         return D[n - 1][m - 1]
 
 
+def testCode():
+    print("This is for running test code")
+    # print(hMusic.isExistMusicArtistTitle("아이유(IU)", "에잇(따다다)", exactMode=False))
+
+
 if __name__ == "__main__":
 
     # setting define directory
-    DB_HOST = "192.168.35.215"
+    DB_HOST = "192.168.35.33"
     DB_USER = "kodi"
     DB_PASSWD = "kodi"
     DB_NAME = "Home_Music"
@@ -1102,6 +1132,7 @@ if __name__ == "__main__":
         action="store_true",
         help="update database based on music in the Music home directory",
     )
+    parser.add_argument("-t", "--test", required=False, action="store_true", help="run test code")
 
     args = parser.parse_args()
 
@@ -1147,7 +1178,8 @@ if __name__ == "__main__":
 
             musicInfos = hMusic.mkMusicInfo(args.musicsList)
             # hRank.updateRank(musicInfos)
-            hMusic.addMusics(musicInfos, musicHome)
+            # '아이유'와 '아이유(IU)'를 같은 것을 보고 파일을 추가함.
+            hMusic.addMusics(musicInfos, musicHome, exactMode=False)
 
         if args.operation == "add":
             logger.debug("Add user ----")
@@ -1180,3 +1212,6 @@ if __name__ == "__main__":
             musicInfos = hMusic.getMusicInfos()
             hRank.updateRank(musicInfos)
             hMusic.updateMusicInfos(musicInfos)
+
+        if args.test:
+            testCode()
