@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
-# ver 0.1 : release 19.08.07
-# ver 0.2 : support ranking  based on melon top 100 chart
-# ver 0.3 : support updating database based on music in the directory
-# ver 0.4 : [bug fix] change handling escape characters
-# ver 0.5 : change to python3 and make class
-# ver 0.51 : [bug fix] 사용자 암호 오류시 무언종료 수정
 # ver 0.52 : [bug fix] 동일한 노래를 중복 추가 내용 수정 (issue #4)
+# ver 0.51 : [bug fix] 사용자 암호 오류시 무언종료 수정
+# ver 0.5 : change to python3 and make class
+# ver 0.4 : [bug fix] change handling escape characters
+# ver 0.3 : support updating database based on music in the directory
+# ver 0.2 : support ranking  based on melon top 100 chart
+# ver 0.1 : release 19.08.07
 
 import shutil
 import pathlib
